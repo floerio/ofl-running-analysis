@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# deploy.sh — Build image on Mac, push to GHCR, deploy to VPS
+# Usage: ./deploy.sh
+
+set -euo pipefail
+
+IMAGE="ghcr.io/floerio/kn-query-assistant:latest"
+VPS="ht2-cmd"
+APP_DIR="~/apps/kn-query-assistant"
+
+echo "[1/3] Building image..."
+docker pull "$IMAGE" 2>/dev/null || true
+docker build --platform linux/amd64 --cache-from "$IMAGE" -t "$IMAGE" .
+
+echo "[2/3] Pushing to GitHub Container Registry..."
+docker push "$IMAGE"
+
+echo "[3/3] Deploying on VPS..."
+ssh -t "$VPS" "docker pull $IMAGE && cd $APP_DIR && docker compose up -d"
+
+echo "Done! App is live."

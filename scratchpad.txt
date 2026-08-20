@@ -1,0 +1,15 @@
+
+// anlegen
+/opt/homebrew/bin/python3.13 -m venv .venv  
+
+
+
+// aufruf
+```bash                                                                                                                          
+   source .venv/bin/activate    
+
+
+   python -m pip install -r requirements.txt   
+                                                                                                     
+   python query_assistant.py                                                                                                      
+ ```                        

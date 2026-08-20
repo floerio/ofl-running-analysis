@@ -1,0 +1,20 @@
+services:
+  app:
+    image: ghcr.io/floerio/kn-query-assistant:latest
+    container_name: kn-query-assistant
+    restart: unless-stopped
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.kn-query-assistant.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.kn-query-assistant.entrypoints=websecure"
+      - "traefik.http.routers.kn-query-assistant.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kn-query-assistant.loadbalancer.server.port=8501"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
