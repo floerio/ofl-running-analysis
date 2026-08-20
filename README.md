@@ -1,0 +1,151 @@
+# 🏃 OFL Running Analysis
+
+A personal AI-powered data assistant for Garmin running data. Ask questions in plain English — the app generates SQL, queries your data with DuckDB, writes a clear answer, and renders a chart automatically.
+
+**Live demo:** [ofl-running.duckdns.org](https://ofl-running.duckdns.org) *(password protected)*
+
+---
+
+## Features
+
+- 💬 **Chat interface** — ask questions in plain English about your running history
+- 🤖 **LLM-powered SQL** — automatically generates and self-corrects DuckDB SQL queries
+- 📊 **Auto charts** — matplotlib charts generated and rendered per answer
+- 🔀 **Model selector** — switch between available LLMs at runtime via the sidebar
+- 🕓 **Conversation history** — multi-turn questions with full context
+- 📋 **Prompt history** — persisted across sessions, re-run with one click
+- 🔒 **Password gate** — optional login screen for public deployments
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| UI | [Streamlit](https://streamlit.io) |
+| Query engine | [DuckDB](https://duckdb.org) |
+| LLM | OpenAI-compatible API (Mistral, Claude, GPT, …) |
+| Charts | matplotlib |
+| Data | Garmin Connect CSV export |
+
+---
+
+## Quick Start
+
+**Prerequisites:** Python 3.9+, an OpenAI-compatible API key
+
+```bash
+git clone https://github.com/floerio/ofl-running-analysis.git
+cd ofl-running-analysis
+
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file:
+```env
+OPENAI_API_KEY=<your-key>
+OPENAI_BASE_URL=https://api.mistral.ai/v1
+OPENAI_MODEL=mistral-medium-latest
+APP_PASSWORD=<optional-password>
+```
+
+Launch the web UI:
+```bash
+streamlit run app.py
+```
+
+Or use the CLI:
+```bash
+python query_assistant.py "how many runs have I done?"
+python query_assistant.py "show my total distance per month"
+```
+
+---
+
+## How It Works
+
+```
+User Question
+     │
+     ▼
+1. ensure_parquet()       CSV → Parquet (only when data.csv is newer)
+     │
+     ▼
+2. get_schema()           Column names, types + 5 sample rows → passed to LLM
+     │
+     ▼
+3. generate_sql()         LLM generates DuckDB SQL (temperature=0)
+     │
+     ▼
+4. run_query()            DuckDB executes SQL → DataFrame
+     │  on error          fix_sql() → LLM self-corrects, retries up to 3×
+     │
+     ▼
+5. formulate_answer()     LLM writes a plain-English answer
+     │
+     ▼
+6. generate_chart_code()  LLM decides if a chart is useful, returns matplotlib code
+     │
+     ▼
+   render_chart()         Code patched + executed, Figure returned
+```
+
+---
+
+## Data
+
+Garmin Connect running export with 358 activities (Oct 2023 – Aug 2026), including:
+distance, pace, heart rate, cadence, power, elevation, stride length, and more.
+
+Locations: Hamburg, Gremersdorf, Kungälv.
+
+---
+
+## Configuration
+
+| Variable | Description |
+|---|---|
+| `OPENAI_API_KEY` | API key for your LLM provider |
+| `OPENAI_BASE_URL` | Provider base URL (e.g. `https://api.mistral.ai/v1`) |
+| `OPENAI_MODEL` | Default model (e.g. `mistral-medium-latest`) |
+| `APP_PASSWORD` | Optional — enables password gate in the web UI |
+
+Any OpenAI-compatible provider works. The model selector in the sidebar fetches available models live from the configured `OPENAI_BASE_URL`.
+
+---
+
+## Deployment
+
+The app is containerized and deployed to a Hetzner VPS via GitHub Container Registry and Traefik.
+
+```bash
+./deploy.sh   # build → push to GHCR → pull & restart on VPS
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup guide.
+
+---
+
+## Project Structure
+
+```
+ofl-running-analysis/
+├── core.py               # Shared logic: DuckDB, LLM calls, chart rendering
+├── app.py                # Streamlit web UI
+├── query_assistant.py    # CLI entry point
+├── data.csv              # Garmin running export
+├── requirements.txt      # Python dependencies
+├── Dockerfile
+├── docker-compose.yml
+├── deploy.sh
+├── PROJECT.md            # Detailed project documentation
+└── DEPLOYMENT.md         # Deployment guide
+```
+
+---
+
+## License
+
+Personal project — not intended for public reuse.
