@@ -26,11 +26,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+)
 
 CSV_FILE = "data.csv"
 PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# Models that are NOT chat/completion models — excluded from the selector
+_EXCLUDED_MODEL_KEYWORDS = [
+    "embedding", "embed", "rerank", "tts", "whisper", "image", "vision",
+    "bge", "ada", "realtime",
+]
+
+
+def get_available_models() -> list[str]:
+    """Fetch available chat models from the provider, excluding non-chat models."""
+    try:
+        models = client.models.list()
+        result = []
+        for m in sorted(models, key=lambda x: x.id):
+            mid = m.id.lower()
+            if any(kw in mid for kw in _EXCLUDED_MODEL_KEYWORDS):
+                continue
+            result.append(m.id)
+        return result
+    except Exception:
+        return [MODEL]  # fallback to env-configured model
 
 
 # ── Step 0: Convert CSV to Parquet if needed ─────────────────────────────────
@@ -98,7 +122,7 @@ def _format_history_for_prompt(history: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_sql(question: str, schema: str, history: Optional[list] = None) -> str:
+def generate_sql(question: str, schema: str, history: Optional[list] = None, model: str = MODEL) -> str:
     history_block = _format_history_for_prompt(history or [])
     history_section = f"""
 {history_block}
@@ -118,7 +142,7 @@ Write a single DuckDB SQL query to answer this question. Return ONLY the SQL, no
 Question: {question}"""
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
@@ -135,7 +159,7 @@ def run_query(sql: str, parquet_file: str = PARQUET_FILE) -> pd.DataFrame:
 
 
 # ── Step 3b: LLM fixes broken SQL ────────────────────────────────────────────
-def fix_sql(sql: str, error: str, schema: str) -> str:
+def fix_sql(sql: str, error: str, schema: str, model: str = MODEL) -> str:
     prompt = f"""You are a SQL expert using DuckDB. The following SQL query failed with an error.
 
 Schema:
@@ -151,7 +175,7 @@ Error:
 Fix the SQL query, following the rules above. Return ONLY the corrected SQL, no explanation."""
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
@@ -160,7 +184,7 @@ Fix the SQL query, following the rules above. Return ONLY the corrected SQL, no 
     return fixed
 
 
-def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FILE, max_retries: int = 3):
+def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FILE, max_retries: int = 3, model: str = MODEL):
     """Runs the SQL, asking the LLM to fix it on failure. Returns (df, final_sql, attempts_log)."""
     attempts_log = []
     for attempt in range(1, max_retries + 1):
@@ -171,7 +195,7 @@ def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FI
             attempts_log.append(f"Attempt {attempt}/{max_retries} failed: {e}")
             logger.warning("SQL error (attempt %d/%d): %s\nSQL:\n%s", attempt, max_retries, e, sql)
             if attempt < max_retries:
-                sql = fix_sql(sql, str(e), schema)
+                sql = fix_sql(sql, str(e), schema, model=model)
             else:
                 logger.error("SQL failed after %d attempts: %s\nFinal SQL:\n%s", max_retries, e, sql)
                 raise
@@ -193,7 +217,7 @@ def _safe_pace_to_seconds(val):
         return None
 
 
-def generate_chart_code(question: str, result_df: pd.DataFrame) -> Optional[str]:
+def generate_chart_code(question: str, result_df: pd.DataFrame, model: str = MODEL) -> Optional[str]:
     """Ask the LLM if a chart makes sense. Returns cleaned Python code, or None."""
     result_str = result_df.to_string(index=False)
     prompt = f"""You are a data visualisation expert using Python and matplotlib.
@@ -214,7 +238,7 @@ If YES: return ONLY executable Python code that:
 If NO: return exactly the word NO and nothing else."""
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )
@@ -292,7 +316,7 @@ def render_chart(code: str, question: str, result_df: pd.DataFrame):
 
 
 # ── Step 5: LLM formulates a nice answer ─────────────────────────────────────
-def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[list] = None) -> str:
+def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[list] = None, model: str = MODEL) -> str:
     result_str = result_df.to_string(index=False) if not result_df.empty else "No results found."
     history_block = _format_history_for_prompt(history or [])
     history_section = f"""
@@ -309,7 +333,7 @@ The SQL query returned this data:
 Write a clear, concise, well-formulated answer in plain English based on the data above."""
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
     )

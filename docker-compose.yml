@@ -1,17 +1,17 @@
 services:
   app:
-    image: ghcr.io/floerio/kn-query-assistant:latest
-    container_name: kn-query-assistant
+    image: ghcr.io/floerio/ofl-running-analysis:latest
+    container_name: ofl-running-analysis
     restart: unless-stopped
     env_file:
       - .env
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.kn-query-assistant.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.kn-query-assistant.entrypoints=websecure"
-      - "traefik.http.routers.kn-query-assistant.tls.certresolver=letsencrypt"
-      - "traefik.http.services.kn-query-assistant.loadbalancer.server.port=8501"
+      - "traefik.http.routers.ofl-running-analysis.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.ofl-running-analysis.entrypoints=websecure"
+      - "traefik.http.routers.ofl-running-analysis.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ofl-running-analysis.loadbalancer.server.port=8501"
     networks:
       - proxy
 

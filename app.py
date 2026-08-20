@@ -90,9 +90,27 @@ if "prompt_prefill" not in st.session_state:
     st.session_state.prompt_prefill = None  # set by prompt history click
 if "prompt_history" not in st.session_state:
     st.session_state.prompt_history = load_prompt_history()
+if "selected_model" not in st.session_state:
+    st.session_state.selected_model = core.MODEL
 
 with st.sidebar:
     st.header("Settings")
+
+    # ── Model selector ────────────────────────────────────
+    @st.cache_data(show_spinner=False)
+    def fetch_models():
+        return core.get_available_models()
+
+    available_models = fetch_models()
+    default_idx = available_models.index(st.session_state.selected_model) if st.session_state.selected_model in available_models else 0
+    st.session_state.selected_model = st.selectbox(
+        "🤖 Model",
+        options=available_models,
+        index=default_idx,
+        help="Select the LLM to use for SQL generation and answering.",
+    )
+    st.markdown("---")
+
     st.session_state.generate_chart = st.toggle(
         "Generate chart",
         value=st.session_state.generate_chart,
@@ -186,11 +204,11 @@ if question:
 
     with st.chat_message("assistant"):
         with st.spinner("Generating SQL..."):
-            sql = core.generate_sql(question, schema, history=st.session_state.history)
+            sql = core.generate_sql(question, schema, history=st.session_state.history, model=st.session_state.selected_model)
 
         with st.spinner("Querying data..."):
             try:
-                df, final_sql, attempts_log = core.run_query_with_retries(sql, schema)
+                df, final_sql, attempts_log = core.run_query_with_retries(sql, schema, model=st.session_state.selected_model)
                 for line in attempts_log:
                     st.warning(line)
             except Exception as e:
@@ -198,7 +216,7 @@ if question:
                 st.stop()
 
         with st.spinner("Formulating answer..."):
-            answer = core.formulate_answer(question, df, history=st.session_state.history)
+            answer = core.formulate_answer(question, df, history=st.session_state.history, model=st.session_state.selected_model)
         st.write(answer)
 
         if not df.empty:
@@ -208,7 +226,7 @@ if question:
         chart_on_demand = False
         if st.session_state.generate_chart:
             with st.spinner("Checking if a chart makes sense..."):
-                chart_code = core.generate_chart_code(question, df)
+                chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model)
                 if chart_code:
                     fig = core.render_chart(chart_code, question, df)
                     if fig is not None:
@@ -220,7 +238,7 @@ if question:
             new_idx = len(st.session_state.history)
             if st.button(":material/bar_chart: Generate chart", key=f"chart_btn_{new_idx}"):
                 with st.spinner("Generating chart..."):
-                    chart_code = core.generate_chart_code(question, df)
+                    chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model)
                     if chart_code:
                         fig = core.render_chart(chart_code, question, df)
                         chart_on_demand = False

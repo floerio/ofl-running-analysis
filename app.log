@@ -246,3 +246,42 @@ plt.tight_layout()
 
 plt.gcf().suptitle('Q: "show my runs in december 2025 together with the pace"', fontsize=13, fontweight='bold', y=1.02)
 plt.tight_layout()
+2026-08-20 09:06:59 [ERROR] Chart rendering failed: could not convert string to float: '6:54'
+Code:
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+# Convert Date column to datetime
+df['Date'] = pd.to_datetime(df['Date'])
+
+# Create figure and axis
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 15), sharex=True)
+
+# Plot 1: Distance over time
+ax1.plot(df['Date'], df['Distance'], marker='o', linestyle='-', color='tab:blue')
+ax1.set_ylabel('Distance (km)')
+ax1.set_title('Running Distance Over Time in 2026')
+ax1.grid(True, alpha=0.3)
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+ax1.xaxis.set_major_locator(mdates.MonthLocator())
+
+# Plot 2: Pace over time
+ax2.plot(df['Date'], df['Avg Pace'].str.replace(',', '.').astype(float), marker='o', linestyle='-', color='tab:orange')
+ax2.set_ylabel('Average Pace (min/km)')
+ax2.invert_yaxis()  # Faster pace (lower number) at top
+ax2.grid(True, alpha=0.3)
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+ax2.xaxis.set_major_locator(mdates.MonthLocator())
+
+# Plot 3: Calories over time
+ax3.plot(df['Date'], df['Calories'], marker='o', linestyle='-', color='tab:green')
+ax3.set_ylabel('Calories Burned')
+ax3.set_xlabel('Date')
+ax3.grid(True, alpha=0.3)
+ax3.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+ax3.xaxis.set_major_locator(mdates.MonthLocator())
+
+plt.tight_layout()
+
+plt.gcf().suptitle('Q: "what are my runs in 2026"', fontsize=13, fontweight='bold', y=1.02)
+plt.tight_layout()

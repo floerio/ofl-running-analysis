@@ -4,16 +4,19 @@
 
 set -euo pipefail
 
-IMAGE="ghcr.io/floerio/kn-query-assistant:latest"
+IMAGE="ghcr.io/floerio/ofl-running-analysis:latest"
 VPS="ht2-cmd"
-APP_DIR="~/apps/kn-query-assistant"
+APP_DIR="~/apps/ofl-running-analysis"
 
 echo "[1/3] Building image..."
-docker pull "$IMAGE" 2>/dev/null || true
-docker build --platform linux/amd64 --cache-from "$IMAGE" -t "$IMAGE" .
+docker buildx build \
+  --platform linux/amd64 \
+  --cache-from "type=registry,ref=$IMAGE" \
+  --cache-to "type=inline" \
+  --push \
+  -t "$IMAGE" .
 
-echo "[2/3] Pushing to GitHub Container Registry..."
-docker push "$IMAGE"
+echo "[2/3] Pushed to GitHub Container Registry."
 
 echo "[3/3] Deploying on VPS..."
 ssh -t "$VPS" "docker pull $IMAGE && cd $APP_DIR && docker compose up -d"
