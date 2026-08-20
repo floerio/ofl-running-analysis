@@ -14,11 +14,12 @@ it is not tied to any single app.
 
 | Item | Value |
 |---|---|
-| Server | Hetzner VPS, SSH alias `ht2` (`46.224.167.17`) |
+| Server | Hetzner VPS, SSH alias `ht2-cmd` (`46.224.167.17`) |
 | SSH user | `peter` |
-| App directory on server | `~/apps/kn-query-assistant` |
+| App directory on server | `~/apps/ofl-running-analysis` |
 | Domain | `ofl-running.duckdns.org` (free DuckDNS subdomain → server IP) |
-| Reverse proxy | Traefik `latest`, container `traefik`, standalone stack at `~/traefik/` on `ht2` (owned by `peter`, dedicated to routing — no app bundled in) |
+| Container image | `ghcr.io/floerio/ofl-running-analysis:latest` |
+| Reverse proxy | Traefik `latest`, container `traefik`, standalone stack at `~/traefik/` on `ht2-cmd` (owned by `peter`, dedicated to routing — no app bundled in) |
 | TLS | Automatic via Let's Encrypt (HTTP-01 challenge, handled by Traefik) |
 | Container runtime | Docker, orchestrated with `docker compose` (v2 plugin, v5.5.0, installed per-user at `~/.docker/cli-plugins/docker-compose` — no root needed) |
 | Restart policy | `unless-stopped` (auto-restarts on crash/reboot) for both the app and Traefik |
@@ -38,7 +39,7 @@ to root-level control of containers.
 ### The dedicated Traefik instance (`~/traefik/`)
 
 ```yaml
-# ~/traefik/docker-compose.yml (on ht2, owned by peter)
+# ~/traefik/docker-compose.yml (on ht2-cmd, owned by peter)
 services:
   traefik:
     image: traefik:latest
@@ -74,28 +75,6 @@ simply by:
 
 No changes to this Traefik config are needed to add new apps.
 
-#### History: replaced the `format-validator` bundled Traefik
-
-The box previously ran a different Traefik instance bundled inside another project's compose file
-(`/opt/docker/ai-based-mapping/format-validator/docker-compose.yml`, container
-`format-validator_traefik_1`). That setup was replaced with the dedicated instance above because:
-- It mixed an unrelated app's lifecycle with shared routing infrastructure.
-- The intent going forward is to have **one** neutral Traefik instance that any project can attach
-  to.
-
-The old Traefik container and the `format-validator` app container were both stopped and set to
-`restart: no` (so they won't come back on their own):
-```bash
-ssh ht2 "docker update --restart no format-validator_traefik_1 && docker stop format-validator_traefik_1"
-```
-They were left in place (not removed) in case that project still needs them later — they simply
-no longer occupy ports 80/443.
-
-There's also a separate, unrelated, unused root-owned compose file at `/opt/docker/docker-compose.yml`
-with a similar Traefik definition — that one was **not** used (it's root-owned, `peter` can't edit
-it without sudo, and it had a bug where the service never actually joined the `proxy` network).
-The `~/traefik/` stack above is a corrected, peter-owned equivalent.
-
 ---
 
 ## Files Added for Deployment
@@ -114,10 +93,10 @@ The `~/traefik/` stack above is a corrected, peter-owned equivalent.
 labels:
   - "traefik.enable=true"
   - "traefik.docker.network=proxy"
-  - "traefik.http.routers.kn-query-assistant.rule=Host(`${DOMAIN}`)"
-  - "traefik.http.routers.kn-query-assistant.entrypoints=websecure"
-  - "traefik.http.routers.kn-query-assistant.tls.certresolver=letsencrypt"
-  - "traefik.http.services.kn-query-assistant.loadbalancer.server.port=8501"
+  - "traefik.http.routers.ofl-running-analysis.rule=Host(`${DOMAIN}`)"
+  - "traefik.http.routers.ofl-running-analysis.entrypoints=websecure"
+  - "traefik.http.routers.ofl-running-analysis.tls.certresolver=letsencrypt"
+  - "traefik.http.services.ofl-running-analysis.loadbalancer.server.port=8501"
 ```
 
 `${DOMAIN}` is read from the server's `.env` file.
@@ -127,43 +106,47 @@ labels:
 ## Security
 
 - **Password gate**: the app requires a password (`APP_PASSWORD` env var, checked in `app.py`)
-  before granting access. This is essential because the app calls the OpenAI API with a real
+  before granting access. This is essential because the app calls the LLM API with a real
   API key on every question — an unprotected public instance would allow anyone to rack up
   API costs.
-- **Secrets never committed to git**: `.env` lives only on the server (`~/apps/kn-query-assistant/.env`,
-  file mode `600`), separate from the local dev `.env`. `.env_example` in the repo documents the
-  required variables without real values.
-- **HTTPS everywhere**: Traefik terminates TLS and (per its global config) redirects HTTP → HTTPS.
+- **Secrets never committed to git**: `.env` lives only on the server (`~/apps/ofl-running-analysis/.env`,
+  file mode `600`), separate from the local dev `.env`.
+- **HTTPS everywhere**: Traefik terminates TLS and redirects HTTP → HTTPS.
+
+### `.env` on the VPS
+```
+OPENAI_API_KEY=<your-key>
+OPENAI_BASE_URL=https://api.mistral.ai/v1
+OPENAI_MODEL=mistral-medium-latest
+APP_PASSWORD=<your-password>
+DOMAIN=ofl-running.duckdns.org
+```
+
+To edit:
+```bash
+ssh ht2-cmd "nano ~/apps/ofl-running-analysis/.env"
+```
+
+> ⚠️ Make sure each variable is on its own line with no trailing spaces — malformed `.env` files
+> (e.g. values accidentally merged across lines) will cause authentication errors at runtime.
 
 ---
 
 ## Initial Setup (already done — for reference)
 
-1. Confirmed SSH access as `peter@ht2` (Docker group member, no root needed).
+1. Confirmed SSH access as `peter@ht2-cmd` (Docker group member, no root needed).
 2. Registered `ofl-running.duckdns.org` on [duckdns.org](https://www.duckdns.org), pointed at `46.224.167.17`.
 3. Set up the dedicated Traefik instance at `~/traefik/` (see above) on the `proxy` network.
-4. Copied the project to the server (excluding local dev artifacts):
-   ```bash
-   rsync -avz --exclude='.venv' --exclude='.git' --exclude='__pycache__' \
-     --exclude='app.log' --exclude='test_chart_0.png' --exclude='data.parquet' \
-     --exclude='scratchpad.txt' --exclude='.env' \
-     ./ ht2:~/apps/kn-query-assistant/
-   ```
-5. Created the production `.env` directly on the server (real API key, `APP_PASSWORD`, `DOMAIN`),
-   `chmod 600`.
-6. Built and started the container:
-   ```bash
-   ssh ht2
-   cd ~/apps/kn-query-assistant
-   docker-compose up -d --build
-   ```
+4. Created `~/apps/ofl-running-analysis/` and the production `.env` directly on the server, `chmod 600`.
+5. Authenticated Docker to GHCR on both Mac and VPS (see below).
+6. Ran `./deploy.sh` for the first time to build, push, and start the container.
 7. Verified: `curl -I https://ofl-running.duckdns.org/` → `HTTP/2 200`, valid Let's Encrypt cert.
 
 ---
 
 ## Day-to-Day Operations
 
-All commands run on the server (`ssh ht2`, then `cd ~/apps/kn-query-assistant`):
+All commands run on the server (`ssh ht2-cmd`, then `cd ~/apps/ofl-running-analysis`):
 
 ```bash
 docker compose logs -f          # tail live logs
@@ -177,17 +160,18 @@ docker compose down             # stop and remove the container
 From your local machine, in the project directory:
 
 ```bash
+cd /Users/iteratec/Projects/ofl-running-analysis
 ./deploy.sh
 ```
 
 This single script:
-1. Builds the image locally on your Mac (`--platform linux/amd64` for VPS compatibility)
-2. Pushes it to GitHub Container Registry (`ghcr.io/floerio/kn-query-assistant:latest`)
+1. Builds the image locally on your Mac (`--platform linux/amd64` for VPS compatibility), using Docker's local layer cache for speed
+2. Pushes it to GitHub Container Registry (`ghcr.io/floerio/ofl-running-analysis:latest`)
 3. SSHes into the VPS, pulls the new image, and restarts the container
 
-The VPS no longer needs the source code or build tools — it only runs the pre-built image.
+The VPS does not need the source code or build tools — it only runs the pre-built image.
 
-> **First-time setup:** you need to authenticate Docker to GHCR once on your Mac:
+> **GHCR authentication:** you need to authenticate Docker to GHCR once on your Mac:
 > ```bash
 > echo YOUR_GITHUB_PAT | docker login ghcr.io -u floerio --password-stdin
 > ```
@@ -195,12 +179,13 @@ The VPS no longer needs the source code or build tools — it only runs the pre-
 >
 > On the VPS, authenticate once too (read-only is enough):
 > ```bash
-> ssh ht2
+> ssh ht2-cmd
 > echo YOUR_GITHUB_PAT | docker login ghcr.io -u floerio --password-stdin
 > ```
->
-> The `docker-compose.yml` on the VPS now uses `image: ghcr.io/floerio/kn-query-assistant:latest`
-> instead of `build: .` — so no source code needs to be on the server.
+
+> **Note:** `docker buildx` is not available in this environment. The script uses the legacy
+> `docker build` with local layer cache. Unchanged layers (base image, pip installs) are reused
+> automatically between builds on the same machine.
 
 > **Resolved issue (historical):** early deployments used the old standalone `docker-compose`
 > v1.29.2 binary, which failed to *recreate* an existing container against newer Docker Engine
@@ -215,16 +200,15 @@ The VPS no longer needs the source code or build tools — it only runs the pre-
 > Use `docker compose` (no hyphen) going forward — it doesn't have this bug.
 
 Note: `data.csv` is baked into the Docker image (`COPY data.csv ./` in the `Dockerfile`). If the
-dataset is updated, it will be picked up automatically on the next `docker compose up -d --build`
-(no separate upload step needed beyond the rsync above). `data.parquet` is regenerated inside the
-container on first run.
+dataset is updated, it will be picked up automatically on the next `./deploy.sh`.
+`data.parquet` is regenerated inside the container on first run.
 
 ### Updating secrets (API key, password, etc.)
 
 ```bash
-ssh ht2
-nano ~/apps/kn-query-assistant/.env
-cd ~/apps/kn-query-assistant && docker compose up -d   # recreates container with new env
+ssh ht2-cmd
+nano ~/apps/ofl-running-analysis/.env
+cd ~/apps/ofl-running-analysis && docker compose up -d   # recreates container with new env
 ```
 
 ### Certificate renewal
@@ -239,33 +223,39 @@ projects routed through this Traefik instance).
 
 ### Site unreachable (connection refused on 443), but the app container is running
 
-This happened once (before the Traefik migration described above): the VPS rebooted, and the
-then-shared **Traefik** container (`format-validator_traefik_1`, bundled inside another project)
-did not come back up automatically, because it had restart policy `no`. Since Traefik is what
-terminates TLS and routes traffic to our app, nothing was listening on ports 80/443 even though
-`kn-query-assistant` itself was healthy (it has `restart: unless-stopped` and came back up fine on
-its own).
+The VPS rebooted and the Traefik container didn't come back up.
 
 **Check:**
 ```bash
-ssh ht2 "docker ps -a"          # look for the `traefik` container as Exited
-ssh ht2 "uptime"                # low uptime = recent reboot
+ssh ht2-cmd "docker ps -a"          # look for the `traefik` container as Exited
+ssh ht2-cmd "uptime"                # low uptime = recent reboot
 ```
 
 **Fix:**
 ```bash
-ssh ht2 "cd ~/traefik && docker compose up -d"
+ssh ht2-cmd "cd ~/traefik && docker compose up -d"
 ```
 
-The dedicated `~/traefik/` instance now has `restart: unless-stopped`, so this class of issue
-should no longer happen — but if Traefik is ever manually stopped and the box reboots before it's
-started again, `docker start traefik` (or `docker compose up -d` as above) brings it back.
+The dedicated `~/traefik/` instance has `restart: unless-stopped`, so this should rarely happen.
+
+### Model list shows only one model / wrong models
+
+The `OPENAI_BASE_URL` in the VPS `.env` is missing or incorrect. The app fetches available models
+live from the configured provider — if `OPENAI_BASE_URL` is not set, it falls back to
+`api.openai.com` which won't have the expected models.
+
+**Check:**
+```bash
+ssh ht2-cmd "cat ~/apps/ofl-running-analysis/.env"
+```
+
+**Fix:** ensure `OPENAI_BASE_URL` is set correctly and each line has no trailing spaces or merged values.
 
 ---
 
 ## Adding Another Project to This Traefik Instance
 
-Any new project on `ht2` can be routed through the same `~/traefik/` instance without touching
+Any new project on `ht2-cmd` can be routed through the same `~/traefik/` instance without touching
 its config. In that project's `docker-compose.yml`:
 
 ```yaml
@@ -295,8 +285,5 @@ container, otherwise the Let's Encrypt HTTP-01 challenge will fail.
 ## Known Limitations / Future Improvements
 
 - No automated CI/CD — deployment is manual (`./deploy.sh`). Could be automated with GitHub Actions (build & push on every push to `main`, then trigger a VPS pull via SSH).
-- No per-user rate limiting on OpenAI calls — the password gate prevents unauthenticated access,
-  but a single authenticated user could still run up API costs with many questions.
+- No per-user rate limiting on API calls — the password gate prevents unauthenticated access, but a single authenticated user could still run up API costs with many questions.
 - No log rotation configured for `app.log` inside the container.
-- The old `format-validator` Traefik/app containers were stopped, not removed — they still exist
-  on the host (`docker ps -a`) and could be cleaned up (`docker rm`) once confirmed unneeded.

@@ -9,14 +9,10 @@ VPS="ht2-cmd"
 APP_DIR="~/apps/ofl-running-analysis"
 
 echo "[1/3] Building image..."
-docker buildx build \
-  --platform linux/amd64 \
-  --cache-from "type=registry,ref=$IMAGE" \
-  --cache-to "type=inline" \
-  --push \
-  -t "$IMAGE" .
+docker build --platform linux/amd64 -t "$IMAGE" .
 
-echo "[2/3] Pushed to GitHub Container Registry."
+echo "[2/3] Pushing to GitHub Container Registry..."
+docker push "$IMAGE"
 
 echo "[3/3] Deploying on VPS..."
 ssh -t "$VPS" "docker pull $IMAGE && cd $APP_DIR && docker compose up -d"

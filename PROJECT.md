@@ -1,16 +1,15 @@
 # AI Data Assistant — Project Documentation
 
 ## Overview
-A Python CLI tool that lets the user ask natural language questions about data stored in a CSV file. The AI generates SQL, queries the data via DuckDB, renders a chart if useful, and formulates a plain-English answer.
+A Python CLI and Streamlit web tool that lets the user ask natural language questions about data stored in a CSV file. The AI generates SQL, queries the data via DuckDB, renders a chart if useful, and formulates a plain-English answer.
 
 ---
 
 ## File Structure
 
 ```
-KN_query_assistant/
+ofl-running-analysis/
 ├── .env                  # API credentials and config (not committed)
-├── .env_example          # Example env file for onboarding
 ├── .venv                 # Python virtual environment
 ├── requirements.txt      # Python dependencies
 ├── data.csv              # Source data (Garmin running activities export)
@@ -20,6 +19,8 @@ KN_query_assistant/
 ├── query_assistant.py    # CLI entry point
 ├── Dockerfile            # Container image definition
 ├── docker-compose.yml    # Compose config for container deployment
+├── .dockerignore         # Excludes local dev artifacts from Docker build context
+├── deploy.sh             # One-command deploy script
 ├── DEPLOYMENT.md         # Deployment guide
 └── PROJECT.md            # This file
 ```
@@ -53,9 +54,13 @@ KN_query_assistant/
 ### `.env`
 ```
 OPENAI_API_KEY=<your-key>
-OPENAI_BASE_URL=https://api.iteragpt.iteratec.de
-OPENAI_MODEL=gcp/claude-sonnet-4-6
+OPENAI_BASE_URL=https://api.mistral.ai/v1
+OPENAI_MODEL=mistral-medium-latest
+APP_PASSWORD=<your-password>   # If set, enables a simple password gate
 ```
+
+`OPENAI_BASE_URL` must point to an OpenAI-compatible API. The app uses the Mistral API directly.
+Any OpenAI-compatible provider works — just change `OPENAI_BASE_URL` and `OPENAI_MODEL` accordingly.
 
 ### Script constants (`core.py`)
 ```python
@@ -64,20 +69,15 @@ PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # fallback if env not set
 ```
 
-Optional env var for the web UI:
-```
-APP_PASSWORD=<your-password>   # If set, enables a simple password gate
-```
-
 ---
 
 ## Setup
 
 ```bash
-python -m venv .venv
+cd ofl-running-analysis
+python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python query_assistant.py
 ```
 
 ### `requirements.txt`
@@ -90,18 +90,25 @@ matplotlib
 streamlit
 ```
 
+> **Note:** Python 3.10+ syntax (`X | Y` type unions) is not used — the code is compatible with Python 3.9+.
+
 ---
 
 ## Usage
 
 ### Streamlit web UI
 ```bash
+cd ofl-running-analysis
+source .venv/bin/activate
 streamlit run app.py
 ```
 Opens in the browser at `http://localhost:8501`. Supports:
 - Chat-style interface with full conversation history
 - SQL display, plain-English answer, data table, and chart per question
+- **Model selector** in the sidebar — fetches available models live from the configured provider
 - Schema viewer in the sidebar
+- Prompt history (persisted to `prompt_history.json`)
+- Toggle to enable/disable automatic chart generation
 - Optional password gate via `APP_PASSWORD` env var
 - Clear conversation button
 
@@ -152,6 +159,8 @@ User Question
                                  - CLI: calls plt.show() for a pop-up window
 ```
 
+All LLM calls pass the currently selected model — switchable at runtime via the sidebar selector.
+
 ---
 
 ## Design Decisions
@@ -166,20 +175,24 @@ User Question
 | **Two LLM calls (SQL + answer)** | Clean separation of concerns |
 | **`temperature=0` everywhere** | Fully deterministic output across all LLM calls |
 | **SQL retry loop (3 attempts)** | LLM receives broken SQL + error and fixes it automatically |
+| **Model selector** | Available models fetched live from the provider API; non-chat models (embeddings, rerankers, TTS, etc.) filtered out; selection persisted in session state and passed to all LLM calls |
 | **Chart via `exec()`** | LLM generates matplotlib code, executed in-process with `df`, `plt`, `pd`, `np`, `FuncFormatter`, and `safe_pace_to_seconds` in scope |
 | **Chart code patching** | Generated code is patched before exec to fix known LLM mistakes (e.g. `set_formatter` → `set_major_formatter`, fragile pace parsers replaced with `safe_pace_to_seconds`) |
+| **Datetime → string conversion** | datetime64 columns converted to strings before charting so LLM `.str` accessor calls don't fail |
 | **Matplotlib `Agg` backend** | Set in `app.py` before any pyplot import so chart rendering is headless (no display required); figures returned as objects and rendered via `st.pyplot()` |
 | **Emoji stripping** | String columns stripped of non-ASCII before charting to avoid matplotlib font warnings |
 | **Question as suptitle** | User question injected as bold title above chart so context is always visible |
 | **Password gate** | Optional `APP_PASSWORD` env var enables a simple login screen in the web UI; skipped if not set (suitable for local dev) |
 | **File logging** | Warnings and errors written to `app.log` with timestamps for debugging |
 | **CLI arg support** | `python query_assistant.py "question"` for scripting/testing |
+| **Python 3.9 compatibility** | `X \| Y` union type hints replaced with `Optional[X]` from `typing` |
 
 ---
 
 ## Known Issues / Future Work
 - [x] ~~Add Streamlit web UI (charts embedded in browser)~~
+- [x] ~~Add conversation history (multi-turn questions)~~
+- [x] ~~Model selector for switching LLMs at runtime~~
 - [ ] Save chart images to disk as an option
 - [ ] Support multiple CSV/data files
-- [ ] Add conversation history (multi-turn questions)
 - [ ] Handle very large DataFrames in answer formulation (token limit)
