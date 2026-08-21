@@ -5,7 +5,7 @@
 set -euo pipefail
 
 IMAGE="ghcr.io/floerio/ofl-running-analysis:latest"
-VPS="ht2-cmd"
+VPS="ht2"
 APP_DIR="~/apps/ofl-running-analysis"
 
 echo "[1/3] Building image..."
