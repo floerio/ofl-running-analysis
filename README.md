@@ -11,7 +11,8 @@ A personal AI-powered data assistant for Garmin running data. Ask questions in p
 - 💬 **Chat interface** — ask questions in plain English about your running history
 - 🤖 **LLM-powered SQL** — automatically generates and self-corrects DuckDB SQL queries
 - 📊 **Auto charts** — matplotlib charts generated and rendered per answer
-- 🔀 **Model selector** — switch between available LLMs at runtime via the sidebar
+- 🔀 **Model selector** — switch between available LLMs at runtime via the Config page
+- ✏️ **Runtime-editable prompts** — edit all AI prompts via the Config page without code changes
 - 🕓 **Conversation history** — multi-turn questions with full context
 - 📋 **Prompt history** — persisted across sessions, re-run with one click
 - 🔒 **Password gate** — optional login screen for public deployments
@@ -112,7 +113,10 @@ Locations: Hamburg, Gremersdorf, Kungälv.
 | `OPENAI_MODEL` | Default model (e.g. `mistral-medium-latest`) |
 | `APP_PASSWORD` | Optional — enables password gate in the web UI |
 
-Any OpenAI-compatible provider works. The model selector in the sidebar fetches available models live from the configured `OPENAI_BASE_URL`.
+Any OpenAI-compatible provider works. The model selector on the Config page fetches available models live from the configured `OPENAI_BASE_URL`.
+
+### Prompt System
+All LLM prompts are stored as Markdown files in `prompts/` and can be edited at runtime via the Config page. User overrides are saved to `prompts/user/` (gitignored).
 
 ---
 
@@ -132,8 +136,18 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup guide.
 
 ```
 ofl-running-analysis/
+├── app.py                # Streamlit web UI (main chat interface)
+├── pages/
+│   └── config.py         # Configuration page (model + prompt editing)
 ├── core.py               # Shared logic: DuckDB, LLM calls, chart rendering
-├── app.py                # Streamlit web UI
+├── prompt_manager.py     # Prompt loading, saving, and rendering
+├── prompts/              # AI prompt files (Markdown format)
+│   ├── sql_guidelines.md
+│   ├── generate_sql.md
+│   ├── fix_sql.md
+│   ├── generate_chart_code.md
+│   └── formulate_answer.md
+│   └── user/             # User overrides (gitignored)
 ├── query_assistant.py    # CLI entry point
 ├── data.csv              # Garmin running export
 ├── requirements.txt      # Python dependencies

@@ -86,6 +86,9 @@ No changes to this Traefik config are needed to add new apps.
 | `.dockerignore` | Excludes local dev artifacts (`.venv`, `.git`, logs, cached parquet, etc.) from the build context |
 | `deploy.sh` | One-command deploy: build image on Mac → push to GHCR → pull & restart on VPS |
 | `.env` (server-only, **not in git**) | Production secrets: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `APP_PASSWORD`, `DOMAIN` |
+| `prompt_manager.py` | **NEW** - Prompt loading, saving, and rendering |
+| `pages/config.py` | **NEW** - Configuration page (model selector + prompt editor) |
+| `prompts/` | **NEW** - AI prompt files (Markdown format, user overrides in `prompts/user/`) |
 
 ### `docker-compose.yml` Traefik labels
 

@@ -1,5 +1,8 @@
 # Prompt Configuration System — Implementation Guide
 
+> **✅ STATUS: Implemented** - This system has been fully implemented in the OFL Running Analysis project.
+> See `prompt_manager.py`, `pages/config.py`, and the `prompts/` directory.
+
 This document describes how to implement the runtime-editable prompt system used in the KN Query Assistant. Follow these steps in order. Each step is self-contained and verifiable.
 
 ---

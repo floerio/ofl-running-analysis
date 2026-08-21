@@ -15,7 +15,17 @@ ofl-running-analysis/
 ├── data.csv              # Source data (Garmin running activities export)
 ├── data.parquet          # Auto-generated from data.csv (faster queries)
 ├── core.py               # Shared logic: DuckDB, LLM calls, chart rendering
-├── app.py                # Streamlit web UI
+├── prompt_manager.py     # Prompt loading, saving, and rendering
+├── app.py                # Streamlit web UI (main chat interface)
+├── pages/
+│   └── config.py         # Configuration page (model + prompt editing)
+├── prompts/              # AI prompt files (Markdown format)
+│   ├── sql_guidelines.md # Shared block: DuckDB SQL rules
+│   ├── generate_sql.md   # SQL generation prompt
+│   ├── fix_sql.md        # SQL fixing prompt
+│   ├── generate_chart_code.md # Chart code generation prompt
+│   ├── formulate_answer.md # Answer formulation prompt
+│   └── user/             # User overrides (gitignored)
 ├── query_assistant.py    # CLI entry point
 ├── Dockerfile            # Container image definition
 ├── docker-compose.yml    # Compose config for container deployment
@@ -105,7 +115,8 @@ streamlit run app.py
 Opens in the browser at `http://localhost:8501`. Supports:
 - Chat-style interface with full conversation history
 - SQL display, plain-English answer, data table, and chart per question
-- **Model selector** in the sidebar — fetches available models live from the configured provider
+- **Model selector** on the Config page — fetches available models live from the configured provider
+- **Prompt editor** on the Config page — edit all AI prompts at runtime
 - Schema viewer in the sidebar
 - Prompt history (persisted to `prompt_history.json`)
 - Toggle to enable/disable automatic chart generation
@@ -159,9 +170,40 @@ User Question
                                  - CLI: calls plt.show() for a pop-up window
 ```
 
-All LLM calls pass the currently selected model — switchable at runtime via the sidebar selector.
+All LLM calls pass the currently selected model — switchable at runtime via the Config page.
 
 ---
+
+## Prompt System
+
+All LLM prompts have been externalized from the code into Markdown files for runtime editing.
+
+### Architecture
+- **Prompt files**: Stored in `prompts/` as `.md` files with `{placeholder}` syntax
+- **Shared blocks**: Reusable text (e.g., `sql_guidelines.md`) injected into other prompts
+- **User overrides**: Saved to `prompts/user/` (gitignored), originals never modified
+- **Prompt manager**: `prompt_manager.py` handles loading, rendering, saving, and reverting
+
+### Available Prompts
+
+| Prompt | Purpose | Key Placeholders |
+|--------|---------|------------------|
+| `sql_guidelines` | DuckDB SQL rules (shared block) | None |
+| `generate_sql` | SQL query generation | `{question}`, `{schema}`, `{sql_guidelines}`, `{history_section}` |
+| `fix_sql` | SQL error fixing | `{sql}`, `{error}`, `{schema}`, `{sql_guidelines}` |
+| `generate_chart_code` | Chart code generation | `{question}`, `{result_str}` |
+| `formulate_answer` | Answer formulation | `{question}`, `{result_str}`, `{history_section}` |
+
+### Usage
+1. Navigate to the **Config** page via sidebar
+2. Select your AI model from the dropdown
+3. Expand any prompt section to edit its text
+4. Click **Save** to apply changes (immediate effect)
+5. Click **Revert** to restore the original
+
+---
+
+## Design Decisions
 
 ## Design Decisions
 
