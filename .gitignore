@@ -3,3 +3,4 @@
 
 # Prompt system - user overrides
 prompts/user/
+.DS_Store
