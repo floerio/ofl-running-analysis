@@ -1,3 +1,8 @@
+"""AI Data Assistant - Main application page.
+
+Ask questions about your running data in plain English.
+Configuration is done on the separate Config page.
+"""
 import os
 import json
 import matplotlib
@@ -8,6 +13,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 import core
+import prompt_manager
 
 PROMPT_HISTORY_FILE = "prompt_history.json"
 
@@ -43,7 +49,19 @@ def add_to_prompt_history(prompt: str) -> None:
     # Keep session state in sync so the sidebar reflects the change immediately
     st.session_state.prompt_history = prompts
 
+
 st.set_page_config(page_title="AI Data Assistant", page_icon="📊", layout="wide")
+
+
+# ── Prompt management ───────────────────────────────────────────────────────
+# Load prompts at startup (once per server process)
+if "prompts" not in st.session_state:
+    st.session_state["prompts"] = prompt_manager.load_all()
+
+
+def get_prompts():
+    """Helper to get current prompts."""
+    return st.session_state.get("prompts", prompt_manager.load_all())
 
 
 # ── Simple password gate ─────────────────────────────────────────────────────
@@ -90,27 +108,20 @@ if "prompt_prefill" not in st.session_state:
     st.session_state.prompt_prefill = None  # set by prompt history click
 if "prompt_history" not in st.session_state:
     st.session_state.prompt_history = load_prompt_history()
+
+# Initialize selected_model from session state or default
 if "selected_model" not in st.session_state:
     st.session_state.selected_model = core.MODEL
 
 with st.sidebar:
     st.header("Settings")
-
-    # ── Model selector ────────────────────────────────────
-    @st.cache_data(show_spinner=False)
-    def fetch_models():
-        return core.get_available_models()
-
-    available_models = fetch_models()
-    default_idx = available_models.index(st.session_state.selected_model) if st.session_state.selected_model in available_models else 0
-    st.session_state.selected_model = st.selectbox(
-        "🤖 Model",
-        options=available_models,
-        index=default_idx,
-        help="Select the LLM to use for SQL generation and answering.",
-    )
+    
+    # Show currently selected model at the top
+    st.markdown(f"**Model:** `{st.session_state.selected_model}`")
     st.markdown("---")
 
+    # Note: Model selector is now on the Config page
+    # Keeping generate_chart toggle and clear conversation here for convenience
     st.session_state.generate_chart = st.toggle(
         "Generate chart",
         value=st.session_state.generate_chart,
@@ -123,7 +134,7 @@ with st.sidebar:
 
     # ── Prompt history ────────────────────────────────────
     prompt_history = st.session_state.prompt_history
-    with st.expander(f":material/history: Prompt history ({len(prompt_history)})", expanded=False):
+    with st.expander(f"Prompt history ({len(prompt_history)})", expanded=False):
         if not prompt_history:
             st.caption("No prompts yet.")
         else:
@@ -144,15 +155,16 @@ with st.sidebar:
             },
         )
 
+
 # ── Per-history-item chart button (rendered as a fragment to avoid full rerun) ──
 def _render_chart_button(idx: int):
     item = st.session_state.history[idx]
     if item["fig"] is not None:
         st.pyplot(item["fig"])
     elif item.get("chart_on_demand"):
-        if st.button(":material/bar_chart: Generate chart", key=f"chart_btn_{idx}"):
+        if st.button("Generate chart", key=f"chart_btn_{idx}"):
             with st.spinner("Generating chart..."):
-                chart_code = core.generate_chart_code(item["question"], item["df"])
+                chart_code = core.generate_chart_code(item["question"], item["df"], model=st.session_state.selected_model, prompts=get_prompts())
                 if chart_code:
                     fig = core.render_chart(chart_code, item["question"], item["df"])
                     st.session_state.history[idx]["fig"] = fig
@@ -175,8 +187,9 @@ for i, item in enumerate(st.session_state.history):
         if not item["df"].empty:
             st.dataframe(item["df"], width="stretch")
         _render_chart_button(i)
-        with st.expander(":material/code: SQL", expanded=False):
+        with st.expander("SQL", expanded=False):
             st.code(item["final_sql"], language="sql")
+
 
 # ── New question ───────────────────────────────────────────────────────────
 question = None
@@ -193,22 +206,23 @@ if st.session_state.prompt_prefill:
             key="prefill_input",
         )
     with col2:
-        if st.button(":material/send: Run", use_container_width=True):
+        if st.button("Run", use_container_width=True):
             st.session_state.prompt_prefill = None
             question = edited
 else:
     question = st.chat_input("Ask a question about your running data...")
+
 if question:
     with st.chat_message("user"):
         st.write(question)
 
     with st.chat_message("assistant"):
         with st.spinner("Generating SQL..."):
-            sql = core.generate_sql(question, schema, history=st.session_state.history, model=st.session_state.selected_model)
+            sql = core.generate_sql(question, schema, history=st.session_state.history, model=st.session_state.selected_model, prompts=get_prompts())
 
         with st.spinner("Querying data..."):
             try:
-                df, final_sql, attempts_log = core.run_query_with_retries(sql, schema, model=st.session_state.selected_model)
+                df, final_sql, attempts_log = core.run_query_with_retries(sql, schema, model=st.session_state.selected_model, prompts=get_prompts())
                 for line in attempts_log:
                     st.warning(line)
             except Exception as e:
@@ -216,7 +230,7 @@ if question:
                 st.stop()
 
         with st.spinner("Formulating answer..."):
-            answer = core.formulate_answer(question, df, history=st.session_state.history, model=st.session_state.selected_model)
+            answer = core.formulate_answer(question, df, history=st.session_state.history, model=st.session_state.selected_model, prompts=get_prompts())
         st.write(answer)
 
         if not df.empty:
@@ -226,7 +240,7 @@ if question:
         chart_on_demand = False
         if st.session_state.generate_chart:
             with st.spinner("Checking if a chart makes sense..."):
-                chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model)
+                chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model, prompts=get_prompts())
                 if chart_code:
                     fig = core.render_chart(chart_code, question, df)
                     if fig is not None:
@@ -236,9 +250,9 @@ if question:
         else:
             chart_on_demand = True
             new_idx = len(st.session_state.history)
-            if st.button(":material/bar_chart: Generate chart", key=f"chart_btn_{new_idx}"):
+            if st.button("Generate chart", key=f"chart_btn_{new_idx}"):
                 with st.spinner("Generating chart..."):
-                    chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model)
+                    chart_code = core.generate_chart_code(question, df, model=st.session_state.selected_model, prompts=get_prompts())
                     if chart_code:
                         fig = core.render_chart(chart_code, question, df)
                         chart_on_demand = False
@@ -250,7 +264,7 @@ if question:
                         st.info("The data doesn\'t lend itself to a chart.")
                         chart_on_demand = False
 
-        with st.expander(":material/code: SQL", expanded=False):
+        with st.expander("SQL", expanded=False):
             st.code(final_sql, language="sql")
 
     add_to_prompt_history(question)

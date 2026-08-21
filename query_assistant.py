@@ -1,16 +1,22 @@
 import sys
 import matplotlib.pyplot as plt
 import core
+import prompt_manager
+
+# Load prompts at startup
+PROMPTS = prompt_manager.load_all()
 
 
-def handle(question: str, schema: str):
+def handle(question: str, schema: str, prompts: dict = None):
+    if prompts is None:
+        prompts = PROMPTS
     print("\n⏳ Generating SQL...")
-    sql = core.generate_sql(question, schema)
+    sql = core.generate_sql(question, schema, prompts=prompts)
     print(f"   SQL: {sql}\n")
 
     print("⏳ Querying data...")
     try:
-        df, final_sql, attempts_log = core.run_query_with_retries(sql, schema)
+        df, final_sql, attempts_log = core.run_query_with_retries(sql, schema, prompts=prompts)
         for line in attempts_log:
             print(f"   ⚠️  {line}")
         if final_sql != sql:
@@ -20,10 +26,10 @@ def handle(question: str, schema: str):
         return
 
     print("⏳ Formulating answer...")
-    answer = core.formulate_answer(question, df)
+    answer = core.formulate_answer(question, df, prompts=prompts)
     print(f"\n💬 Answer:\n{answer}\n")
 
-    chart_code = core.generate_chart_code(question, df)
+    chart_code = core.generate_chart_code(question, df, prompts=prompts)
     if chart_code:
         print("📈 Rendering chart...")
         fig = core.render_chart(chart_code, question, df)

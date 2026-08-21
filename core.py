@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Import prompt_manager for prompt rendering
+import prompt_manager
+
 # ── Logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(
     filename="app.log",
@@ -34,6 +37,10 @@ client = OpenAI(
 CSV_FILE = "data.csv"
 PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
+# Load prompts at module level (shared across all instances)
+# This is loaded once when core.py is first imported
+PROMPTS = prompt_manager.load_all()
 
 # Models that are NOT chat/completion models — excluded from the selector
 _EXCLUDED_MODEL_KEYWORDS = [
@@ -93,19 +100,9 @@ def get_schema_df(parquet_file: str = PARQUET_FILE) -> pd.DataFrame:
 
 
 # ── Shared SQL writing guidelines to avoid common LLM mistakes ──────────────
-SQL_GUIDELINES = """Important DuckDB SQL rules to follow:
-- Many numeric-looking columns are stored as VARCHAR because the source data is messy \
-(decimal commas like "8,76", placeholder values like "--" for missing data, stray characters). \
-Always convert them with TRY_CAST(REPLACE(column, ',', '.') AS DOUBLE), NEVER plain CAST — \
-CAST will error out on non-numeric values, TRY_CAST returns NULL instead.
-- Never nest a window function (OVER (...)) inside an aggregate function call, \
-e.g. SUM((x - AVG(x) OVER()) * y) is INVALID SQL. If you need a value computed via a window \
-function as part of an aggregation (e.g. computing a correlation/regression manually), \
-first compute the window function result in a CTE or subquery, then aggregate over that \
-result in an outer query. Alternatively, prefer DuckDB's built-in aggregate statistics \
-functions when they fit (e.g. corr(y, x), regr_slope(y, x), regr_intercept(y, x), stddev, \
-variance) instead of manually reimplementing them.
-"""
+# Now stored in prompts/sql_guidelines.md and loaded via prompt_manager
+# Kept here for backward compatibility if needed, but no longer used
+SQL_GUIDELINES = prompt_manager.original_text("sql_guidelines")
 
 
 # ── Step 2: LLM generates SQL ────────────────────────────────────────────────
@@ -122,7 +119,29 @@ def _format_history_for_prompt(history: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_sql(question: str, schema: str, history: Optional[list] = None, model: str = MODEL) -> str:
+def call_llm(prompt: str, model: str = MODEL) -> str:
+    """Call the LLM with a fully-rendered prompt string."""
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def generate_sql(question: str, schema: str, history: Optional[list] = None, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Generate DuckDB SQL query from a user question.
+    
+    Args:
+        question: User's question in plain English
+        schema: Database schema information
+        history: Optional conversation history for context
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
     history_block = _format_history_for_prompt(history or [])
     history_section = f"""
 {history_block}
@@ -131,24 +150,18 @@ The user may refer to previous questions (e.g. "split that by month", "now filte
 Use the context above to resolve what "that" or "this" refers to.
 """ if history_block else ""
 
-    prompt = f"""You are a SQL expert. The user has a CSV file loaded into DuckDB as a table called 'data'.
-
-Schema:
-{schema}
-
-{SQL_GUIDELINES}{history_section}
-Write a single DuckDB SQL query to answer this question. Return ONLY the SQL, no explanation.
-
-Question: {question}"""
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
+    rendered_prompt = prompt_manager.render(
+        "generate_sql",
+        prompts,
+        question=question,
+        schema=schema,
+        sql_guidelines=prompts.get("sql_guidelines", ""),
+        history_section=history_section,
     )
-    sql = response.choices[0].message.content.strip()
-    sql = sql.removeprefix("```sql").removeprefix("```").removesuffix("```").strip()
-    return sql
+    
+    result = call_llm(rendered_prompt, model=model)
+    result = result.removeprefix("```sql").removeprefix("```").removesuffix("```").strip()
+    return result
 
 
 # ── Step 3: Run SQL with DuckDB ──────────────────────────────────────────────
@@ -159,33 +172,47 @@ def run_query(sql: str, parquet_file: str = PARQUET_FILE) -> pd.DataFrame:
 
 
 # ── Step 3b: LLM fixes broken SQL ────────────────────────────────────────────
-def fix_sql(sql: str, error: str, schema: str, model: str = MODEL) -> str:
-    prompt = f"""You are a SQL expert using DuckDB. The following SQL query failed with an error.
-
-Schema:
-{schema}
-
-{SQL_GUIDELINES}
-Failed SQL:
-{sql}
-
-Error:
-{error}
-
-Fix the SQL query, following the rules above. Return ONLY the corrected SQL, no explanation."""
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
+def fix_sql(sql: str, error: str, schema: str, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Fix a failed SQL query using the LLM.
+    
+    Args:
+        sql: The failed SQL query
+        error: The error message from DuckDB
+        schema: Database schema information
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
+    rendered_prompt = prompt_manager.render(
+        "fix_sql",
+        prompts,
+        sql=sql,
+        error=error,
+        schema=schema,
+        sql_guidelines=prompts.get("sql_guidelines", ""),
     )
-    fixed = response.choices[0].message.content.strip()
-    fixed = fixed.removeprefix("```sql").removeprefix("```").removesuffix("```").strip()
-    return fixed
+    
+    result = call_llm(rendered_prompt, model=model)
+    result = result.removeprefix("```sql").removeprefix("```").removesuffix("```").strip()
+    return result
 
 
-def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FILE, max_retries: int = 3, model: str = MODEL):
-    """Runs the SQL, asking the LLM to fix it on failure. Returns (df, final_sql, attempts_log)."""
+def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FILE, max_retries: int = 3, model: str = MODEL, prompts: Optional[dict] = None):
+    """Runs the SQL, asking the LLM to fix it on failure. Returns (df, final_sql, attempts_log).
+    
+    Args:
+        sql: SQL query to execute
+        schema: Database schema information
+        parquet_file: Path to parquet file
+        max_retries: Maximum number of retry attempts
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
     attempts_log = []
     for attempt in range(1, max_retries + 1):
         try:
@@ -195,7 +222,7 @@ def run_query_with_retries(sql: str, schema: str, parquet_file: str = PARQUET_FI
             attempts_log.append(f"Attempt {attempt}/{max_retries} failed: {e}")
             logger.warning("SQL error (attempt %d/%d): %s\nSQL:\n%s", attempt, max_retries, e, sql)
             if attempt < max_retries:
-                sql = fix_sql(sql, str(e), schema, model=model)
+                sql = fix_sql(sql, str(e), schema, model=model, prompts=prompts)
             else:
                 logger.error("SQL failed after %d attempts: %s\nFinal SQL:\n%s", max_retries, e, sql)
                 raise
@@ -217,37 +244,32 @@ def _safe_pace_to_seconds(val):
         return None
 
 
-def generate_chart_code(question: str, result_df: pd.DataFrame, model: str = MODEL) -> Optional[str]:
-    """Ask the LLM if a chart makes sense. Returns cleaned Python code, or None."""
+def generate_chart_code(question: str, result_df: pd.DataFrame, model: str = MODEL, prompts: Optional[dict] = None) -> Optional[str]:
+    """Ask the LLM if a chart makes sense. Returns cleaned Python code, or None.
+    
+    Args:
+        question: User's question in plain English
+        result_df: The query result DataFrame
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
     result_str = result_df.to_string(index=False)
-    prompt = f"""You are a data visualisation expert using Python and matplotlib.
-
-The user asked: "{question}"
-
-The query result is:
-{result_str}
-
-Decide if this data is worth visualising as a chart (e.g. time series, grouped counts, distributions → yes; single scalar values → no).
-
-If YES: return ONLY executable Python code that:
-- Uses the variable `df` (a pandas DataFrame already in memory with the columns shown above)
-- Creates a clear, labelled matplotlib chart (title, axis labels, tight_layout)
-- Ends with plt.show()
-- Does NOT import pandas or re-create df
-
-If NO: return exactly the word NO and nothing else."""
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
+    rendered_prompt = prompt_manager.render(
+        "generate_chart_code",
+        prompts,
+        question=question,
+        result_str=result_str,
     )
-    code = response.choices[0].message.content.strip()
-    code = code.removeprefix("```python").removeprefix("```").removesuffix("```").strip()
+    
+    result = call_llm(rendered_prompt, model=model)
+    result = result.removeprefix("```python").removeprefix("```").removesuffix("```").strip()
 
-    if code.upper() == "NO":
+    if result.upper() == "NO":
         return None
-    return code
+    return result
 
 
 def render_chart(code: str, question: str, result_df: pd.DataFrame):
@@ -316,7 +338,19 @@ def render_chart(code: str, question: str, result_df: pd.DataFrame):
 
 
 # ── Step 5: LLM formulates a nice answer ─────────────────────────────────────
-def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[list] = None, model: str = MODEL) -> str:
+def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[list] = None, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Generate a plain-English answer from query results.
+    
+    Args:
+        question: User's question in plain English
+        result_df: The query result DataFrame
+        history: Optional conversation history for context
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
     result_str = result_df.to_string(index=False) if not result_df.empty else "No results found."
     history_block = _format_history_for_prompt(history or [])
     history_section = f"""
@@ -325,28 +359,36 @@ def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[l
 The user may refer to previous questions. Use the context above if needed.
 """ if history_block else ""
 
-    prompt = f"""The user asked: "{question}"
-{history_section}
-The SQL query returned this data:
-{result_str}
-
-Write a clear, concise, well-formulated answer in plain English based on the data above."""
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
+    rendered_prompt = prompt_manager.render(
+        "formulate_answer",
+        prompts,
+        question=question,
+        result_str=result_str,
+        history_section=history_section,
     )
-    return response.choices[0].message.content.strip()
+    
+    return call_llm(rendered_prompt, model=model)
 
 
-def answer_question(question: str, schema: str, history: Optional[list] = None, max_retries: int = 3):
+def answer_question(question: str, schema: str, history: Optional[list] = None, max_retries: int = 3, model: str = MODEL, prompts: Optional[dict] = None):
     """High-level orchestration: SQL -> query -> answer -> chart.
-    Returns a dict with keys: sql, df, answer, chart_code, fig (fig may be None)."""
-    sql = generate_sql(question, schema, history=history)
-    df, final_sql, attempts_log = run_query_with_retries(sql, schema, max_retries=max_retries)
-    answer = formulate_answer(question, df, history=history)
-    chart_code = generate_chart_code(question, df)
+    Returns a dict with keys: sql, df, answer, chart_code, fig (fig may be None).
+    
+    Args:
+        question: User's question in plain English
+        schema: Database schema information
+        history: Optional conversation history for context
+        max_retries: Maximum number of retry attempts for SQL
+        model: LLM model to use
+        prompts: Optional prompts dict (defaults to module-level PROMPTS)
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    
+    sql = generate_sql(question, schema, history=history, model=model, prompts=prompts)
+    df, final_sql, attempts_log = run_query_with_retries(sql, schema, max_retries=max_retries, model=model, prompts=prompts)
+    answer = formulate_answer(question, df, history=history, model=model, prompts=prompts)
+    chart_code = generate_chart_code(question, df, model=model, prompts=prompts)
     fig = render_chart(chart_code, question, df) if chart_code else None
     return {
         "sql": sql,
