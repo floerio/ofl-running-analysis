@@ -2,13 +2,17 @@
 
 This page allows users to:
 - Select the AI model
+- Upload/Download data
 - Edit prompts at runtime
 """
 import os
+import logging
 import streamlit as st
 
 import core
 import prompt_manager
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Configuration", page_icon="⚙️")
 
@@ -67,6 +71,52 @@ st.session_state.selected_model = st.selectbox(
     options=available_models,
     index=default_idx,
 )
+
+st.markdown("---")
+
+# ── Data Management ───────────────────────────────────────────────────────
+st.header("📁 Data Management")
+
+col_upload, col_download = st.columns(2)
+
+with col_upload:
+    uploaded_file = st.file_uploader(
+        "Upload CSV",
+        type=["csv"],
+        help="Upload a Garmin CSV to merge new activities (duplicates skipped)",
+        key="data_upload",
+    )
+    
+    if uploaded_file is not None:
+        with st.spinner("Processing upload..."):
+            try:
+                # Save uploaded file to temp location
+                temp_path = "temp_upload.csv"
+                core.save_uploaded_file(uploaded_file, temp_path)
+                
+                # Merge data
+                rows_added, message = core.merge_data(temp_path)
+                
+                # Clean up temp file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                
+                st.success(message)
+                
+                # Always rerun to reload fresh data and schema
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error processing upload: {e}")
+
+with col_download:
+    if st.button("📥 Download Current Data", use_container_width=True):
+        with open(core.CSV_FILE, "rb") as f:
+            st.download_button(
+                label="Download data.csv",
+                data=f,
+                file_name="running_data.csv",
+                mime="text/csv",
+            )
 
 st.markdown("---")
 

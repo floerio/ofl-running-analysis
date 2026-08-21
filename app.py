@@ -120,7 +120,7 @@ with st.sidebar:
     st.markdown(f"**Model:** `{st.session_state.selected_model}`")
     st.markdown("---")
 
-    # Note: Model selector is now on the Config page
+    # Note: Model selector, Data upload, and Data download are now on the Config page
     # Keeping generate_chart toggle and clear conversation here for convenience
     st.session_state.generate_chart = st.toggle(
         "Generate chart",

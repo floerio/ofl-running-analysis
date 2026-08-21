@@ -18,7 +18,7 @@ ofl-running-analysis/
 ├── prompt_manager.py     # Prompt loading, saving, and rendering
 ├── app.py                # Streamlit web UI (main chat interface)
 ├── pages/
-│   └── config.py         # Configuration page (model + prompt editing)
+│   └── config.py         # Configuration page (model + data upload/download + prompt editing)
 ├── prompts/              # AI prompt files (Markdown format)
 │   ├── sql_guidelines.md # Shared block: DuckDB SQL rules
 │   ├── generate_sql.md   # SQL generation prompt
@@ -115,13 +115,18 @@ streamlit run app.py
 Opens in the browser at `http://localhost:8501`. Supports:
 - Chat-style interface with full conversation history
 - SQL display, plain-English answer, data table, and chart per question
-- **Model selector** on the Config page — fetches available models live from the configured provider
-- **Prompt editor** on the Config page — edit all AI prompts at runtime
 - Schema viewer in the sidebar
 - Prompt history (persisted to `prompt_history.json`)
 - Toggle to enable/disable automatic chart generation
 - Optional password gate via `APP_PASSWORD` env var
 - Clear conversation button
+
+### Configuration Page
+Access via sidebar navigation → **Config** page. Provides:
+- **Model selector** — fetches available models live from the configured provider
+- **Data upload** — upload Garmin CSV to merge new activities (duplicates skipped)
+- **Data download** — export current dataset as CSV
+- **Prompt editor** — edit all AI prompts at runtime
 
 ### CLI — Interactive mode
 ```bash
@@ -171,6 +176,23 @@ User Question
 ```
 
 All LLM calls pass the currently selected model — switchable at runtime via the Config page.
+
+---
+
+## Data Management
+
+The app supports uploading and downloading CSV data via the Config page.
+
+### Upload Feature
+- **Merge mode**: New activities are added, duplicates are skipped
+- **Duplicate detection**: Uses `Date + Title + Activity Type` as unique key
+- **Column validation**: Ensures uploaded CSV matches existing structure
+- **Date normalization**: Handles different date formats automatically
+- **Whitespace handling**: Strips extra spaces from string columns
+
+### Download Feature
+- Exports current `data.csv` file
+- One-click download via browser
 
 ---
 

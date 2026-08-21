@@ -13,6 +13,8 @@ A personal AI-powered data assistant for Garmin running data. Ask questions in p
 - 📊 **Auto charts** — matplotlib charts generated and rendered per answer
 - 🔀 **Model selector** — switch between available LLMs at runtime via the Config page
 - ✏️ **Runtime-editable prompts** — edit all AI prompts via the Config page without code changes
+- 📥 **Data upload** — upload Garmin CSV files to merge new activities (duplicates skipped)
+- 📤 **Data download** — download current dataset as CSV
 - 🕓 **Conversation history** — multi-turn questions with full context
 - 📋 **Prompt history** — persisted across sessions, re-run with one click
 - 🔒 **Password gate** — optional login screen for public deployments
@@ -114,6 +116,10 @@ Locations: Hamburg, Gremersdorf, Kungälv.
 | `APP_PASSWORD` | Optional — enables password gate in the web UI |
 
 Any OpenAI-compatible provider works. The model selector on the Config page fetches available models live from the configured `OPENAI_BASE_URL`.
+
+### Data Management
+- **Upload**: Merge new Garmin CSV data via the Config page. Duplicates (based on Date + Title + Activity Type) are automatically skipped.
+- **Download**: Export your current dataset as CSV from the Config page.
 
 ### Prompt System
 All LLM prompts are stored as Markdown files in `prompts/` and can be edited at runtime via the Config page. User overrides are saved to `prompts/user/` (gitignored).

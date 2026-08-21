@@ -80,6 +80,137 @@ def ensure_parquet(csv_file: str = CSV_FILE, parquet_file: str = PARQUET_FILE) -
     return f"Using existing {parquet_file}"
 
 
+# ── Data Upload Functions ──────────────────────────────────────────────────
+# Unique key columns for duplicate detection (Option A: Date + Title + Activity Type)
+UNIQUE_KEY_COLS = ["Date", "Title", "Activity Type"]
+
+
+def validate_csv_structure(uploaded_df: pd.DataFrame, existing_df: pd.DataFrame) -> tuple[bool, str]:
+    """Validate that uploaded CSV has the same column structure as existing data.
+    
+    Args:
+        uploaded_df: DataFrame from uploaded CSV
+        existing_df: DataFrame from existing parquet
+        
+    Returns:
+        Tuple of (is_valid: bool, error_message: str)
+    """
+    uploaded_cols = set(uploaded_df.columns)
+    existing_cols = set(existing_df.columns)
+    
+    # Debug logging
+    logger.info(f"Uploaded CSV columns: {sorted(uploaded_cols)}")
+    logger.info(f"Existing data columns: {sorted(existing_cols)}")
+    
+    if uploaded_cols == existing_cols:
+        return True, ""
+    
+    missing_in_upload = existing_cols - uploaded_cols
+    extra_in_upload = uploaded_cols - existing_cols
+    
+    error_parts = []
+    if missing_in_upload:
+        error_parts.append(f"Missing columns: {sorted(missing_in_upload)}")
+    if extra_in_upload:
+        error_parts.append(f"Extra columns: {sorted(extra_in_upload)}")
+    
+    return False, " | ".join(error_parts)
+
+
+def merge_data(new_csv_path: str, csv_file: str = CSV_FILE, parquet_file: str = PARQUET_FILE) -> tuple[int, str]:
+    """Merge new CSV data with existing data, skipping duplicates.
+    
+    Uses UNIQUE_KEY_COLS (Date + Title + Activity Type) to identify duplicates.
+    
+    Args:
+        new_csv_path: Path to uploaded CSV file
+        csv_file: Path to existing CSV (will be updated)
+        parquet_file: Path to parquet file (will be regenerated)
+        
+    Returns:
+        Tuple of (rows_added: int, message: str)
+    """
+    # Load existing data
+    if not os.path.exists(parquet_file):
+        # If no existing data, just copy the new file
+        import shutil
+        shutil.copy(new_csv_path, csv_file)
+        ensure_parquet(csv_file, parquet_file)
+        # Count rows in new file
+        new_df = pd.read_csv(new_csv_path, on_bad_lines='skip')
+        return len(new_df), f"✅ Created new dataset with {len(new_df)} activities"
+    
+    existing_df = pd.read_parquet(parquet_file)
+    
+    # Load new data
+    # Use on_bad_lines='skip' to handle any problematic rows
+    new_df = pd.read_csv(new_csv_path, on_bad_lines='skip')
+    
+    # Validate structure
+    is_valid, error_msg = validate_csv_structure(new_df, existing_df)
+    if not is_valid:
+        return 0, f"❌ Column structure mismatch: {error_msg}"
+    
+    # Check for required unique key columns
+    for col in UNIQUE_KEY_COLS:
+        if col not in new_df.columns:
+            return 0, f"❌ Missing required column for duplicate detection: {col}"
+    
+    # Normalize string columns: strip whitespace and convert to string
+    for col in UNIQUE_KEY_COLS:
+        if col in existing_df.columns:
+            existing_df[col] = existing_df[col].astype(str).str.strip()
+        if col in new_df.columns:
+            new_df[col] = new_df[col].astype(str).str.strip()
+    
+    # Normalize Date column to consistent format (YYYY-MM-DD HH:MM:SS)
+    # Handle various Garmin date formats
+    if "Date" in existing_df.columns:
+        existing_df["Date"] = pd.to_datetime(existing_df["Date"], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
+    if "Date" in new_df.columns:
+        new_df["Date"] = pd.to_datetime(new_df["Date"], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Create unique keys for both DataFrames
+    existing_df["__merge_key__"] = existing_df[UNIQUE_KEY_COLS].astype(str).apply("|".join, axis=1)
+    new_df["__merge_key__"] = new_df[UNIQUE_KEY_COLS].astype(str).apply("|".join, axis=1)
+    
+    # Find new rows (not in existing data)
+    new_rows = new_df[~new_df["__merge_key__"].isin(existing_df["__merge_key__"])]
+    
+    if new_rows.empty:
+        return 0, "ℹ️ No new activities found in uploaded file"
+    
+    # Merge: existing + new rows
+    merged_df = pd.concat([existing_df, new_rows], ignore_index=True)
+    
+    # Remove temporary key column
+    merged_df = merged_df.drop(columns=["__merge_key__"])
+    new_df = new_df.drop(columns=["__merge_key__"])
+    
+    # Save merged data to CSV
+    merged_df.to_csv(csv_file, index=False)
+    
+    # Regenerate parquet
+    ensure_parquet(csv_file, parquet_file)
+    
+    return len(new_rows), f"✅ Added {len(new_rows)} new activities"
+
+
+def save_uploaded_file(uploaded_file, save_path: str) -> str:
+    """Save an uploaded Streamlit file to disk.
+    
+    Args:
+        uploaded_file: Streamlit UploadedFile object
+        save_path: Where to save the file
+        
+    Returns:
+        Path to saved file
+    """
+    with open(save_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return save_path
+
+
 # ── Step 1: Inspect Parquet schema for the LLM ──────────────────────────────
 def get_schema(parquet_file: str = PARQUET_FILE) -> str:
     con = duckdb.connect()
