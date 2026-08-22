@@ -10,9 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY core.py app.py query_assistant.py prompt_manager.py ./
+COPY src/ ./src/
+COPY app.py ./
 COPY pages/ ./pages/
 COPY prompts/ ./prompts/
+COPY queries/ ./queries/
+COPY data_dictionary/ ./data_dictionary/
 COPY data.csv ./
 
 EXPOSE 8501

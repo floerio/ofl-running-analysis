@@ -4,3 +4,4 @@ pandas
 python-dotenv
 matplotlib
 streamlit
+pyyaml

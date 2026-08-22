@@ -38,9 +38,11 @@ CSV_FILE = "data.csv"
 PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-# Load prompts at module level (shared across all instances)
+# Load prompts and data dictionary at module level (shared across all instances)
 # This is loaded once when core.py is first imported
+from . import data_dictionary_manager
 PROMPTS = prompt_manager.load_all()
+SCHEMA_DESCRIPTION = data_dictionary_manager.get_schema_description()
 
 # Models that are NOT chat/completion models — excluded from the selector
 _EXCLUDED_MODEL_KEYWORDS = [
@@ -286,6 +288,7 @@ Use the context above to resolve what "that" or "this" refers to.
         prompts,
         question=question,
         schema=schema,
+        schema_description=SCHEMA_DESCRIPTION,
         sql_guidelines=prompts.get("sql_guidelines", ""),
         history_section=history_section,
     )
@@ -322,6 +325,7 @@ def fix_sql(sql: str, error: str, schema: str, model: str = MODEL, prompts: Opti
         sql=sql,
         error=error,
         schema=schema,
+        schema_description=SCHEMA_DESCRIPTION,
         sql_guidelines=prompts.get("sql_guidelines", ""),
     )
     
@@ -393,6 +397,7 @@ def generate_chart_code(question: str, result_df: pd.DataFrame, model: str = MOD
         prompts,
         question=question,
         result_str=result_str,
+        schema_description=SCHEMA_DESCRIPTION,
     )
     
     result = call_llm(rendered_prompt, model=model)
@@ -495,6 +500,7 @@ The user may refer to previous questions. Use the context above if needed.
         prompts,
         question=question,
         result_str=result_str,
+        schema_description=SCHEMA_DESCRIPTION,
         history_section=history_section,
     )
     

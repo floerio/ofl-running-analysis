@@ -1,4 +1,6 @@
-<!-- Available placeholders: {question}, {result_str}, {history_section} -->
+<!-- Available placeholders: {question}, {result_str}, {schema_description}, {history_section} -->
+{schema_description}
+
 The user asked: "{question}"
 {history_section}
 The SQL query returned this data:

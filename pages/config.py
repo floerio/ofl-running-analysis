@@ -12,16 +12,19 @@ import streamlit as st
 from src import core
 from src import prompt_manager
 from src import query_manager
+from src import data_dictionary_manager
 
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Configuration", page_icon="⚙️")
 
-# ── Load prompts and queries at startup ───────────────────────────────────────
+# ── Load prompts, queries, and data dictionary at startup ──────────────────
 if "prompts" not in st.session_state:
     st.session_state["prompts"] = prompt_manager.load_all()
 if "queries" not in st.session_state:
     st.session_state["queries"] = query_manager.load_all()
+if "data_dictionary" not in st.session_state:
+    st.session_state["data_dictionary"] = data_dictionary_manager.load()
 
 
 def get_prompts():
@@ -32,6 +35,11 @@ def get_prompts():
 def get_queries():
     """Helper to get current queries."""
     return st.session_state.get("queries", query_manager.load_all())
+
+
+def get_data_dictionary():
+    """Helper to get current data dictionary."""
+    return st.session_state.get("data_dictionary", data_dictionary_manager.load())
 
 
 # ── Password gate (same as app.py) ──────────────────────────────────────────
@@ -242,3 +250,64 @@ for name in query_manager.QUERY_NAMES:
                     st.session_state["queries"] = query_manager.load_all()
                     st.success("Reverted to original.")
                     st.rerun()
+
+st.markdown("---")
+
+# ── Data Dictionary editor ───────────────────────────────────────────────────
+st.header("📊 Data Dictionary")
+st.caption(
+    "Edit the data dictionary that describes your data columns. This helps the AI "
+    "understand your data structure. Changes take effect immediately. "
+    "The original file in `data_dictionary/default.md` is never modified."
+)
+
+st.markdown("**Note:** Edit the YAML frontmatter directly. The format is:")
+st.code("""
+---
+attributes:
+  - name: Column Name
+    type: data type
+    description: Description of the column
+    optional_names: comma,separated,alternatives
+---
+""", language="yaml")
+
+data_dict = get_data_dictionary()
+
+# Get the raw YAML content
+import yaml
+yaml_content = yaml.dump(
+    data_dict,
+    sort_keys=False,
+    default_flow_style=False,
+    allow_unicode=True
+)
+
+# Display the YAML in a text area
+edited_yaml = st.text_area(
+    "Data Dictionary YAML",
+    value=yaml_content,
+    height=400,
+    key="data_dict_editor",
+    label_visibility="collapsed",
+)
+
+col_save, col_revert = st.columns(2)
+
+with col_save:
+    if st.button("💾 Save Data Dictionary", use_container_width=True):
+        try:
+            data_dictionary_manager.save_user(edited_yaml)
+            st.session_state["data_dictionary"] = data_dictionary_manager.load()
+            st.success("Data dictionary saved!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Failed to save: {e}")
+
+with col_revert:
+    if data_dictionary_manager.is_modified():
+        if st.button("🔄 Revert to Default", use_container_width=True):
+            data_dictionary_manager.revert()
+            st.session_state["data_dictionary"] = data_dictionary_manager.load()
+            st.success("Reverted to default.")
+            st.rerun()
