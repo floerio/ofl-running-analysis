@@ -9,8 +9,8 @@ import os
 import logging
 import streamlit as st
 
-import core
-import prompt_manager
+from src import core
+from src import prompt_manager
 
 logger = logging.getLogger(__name__)
 

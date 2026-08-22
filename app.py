@@ -12,8 +12,8 @@ matplotlib.use("Agg")  # headless backend — must be set before importing core 
 import matplotlib.pyplot as plt
 import streamlit as st
 
-import core
-import prompt_manager
+from src import core
+from src import prompt_manager
 
 PROMPT_HISTORY_FILE = "prompt_history.json"
 

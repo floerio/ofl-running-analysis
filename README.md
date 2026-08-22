@@ -61,8 +61,8 @@ streamlit run app.py
 
 Or use the CLI:
 ```bash
-python query_assistant.py "how many runs have I done?"
-python query_assistant.py "show my total distance per month"
+python -m src.query_assistant "how many runs have I done?"
+python -m src.query_assistant "show my total distance per month"
 ```
 
 ---
@@ -145,8 +145,11 @@ ofl-running-analysis/
 ├── app.py                # Streamlit web UI (main chat interface)
 ├── pages/
 │   └── config.py         # Configuration page (model + prompt editing)
-├── core.py               # Shared logic: DuckDB, LLM calls, chart rendering
-├── prompt_manager.py     # Prompt loading, saving, and rendering
+├── src/                  # Utility modules
+│   ├── __init__.py
+│   ├── core.py           # Shared logic: DuckDB, LLM calls, chart rendering
+│   ├── prompt_manager.py # Prompt loading, saving, and rendering
+│   └── query_assistant.py # CLI entry point
 ├── prompts/              # AI prompt files (Markdown format)
 │   ├── sql_guidelines.md
 │   ├── generate_sql.md
@@ -154,14 +157,18 @@ ofl-running-analysis/
 │   ├── generate_chart_code.md
 │   └── formulate_answer.md
 │   └── user/             # User overrides (gitignored)
-├── query_assistant.py    # CLI entry point
 ├── data.csv              # Garmin running export
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile
 ├── docker-compose.yml
 ├── deploy.sh
-├── PROJECT.md            # Detailed project documentation
-└── DEPLOYMENT.md         # Deployment guide
+├── documentation/
+│   ├── PROJECT.md        # Detailed project documentation
+│   ├── DEPLOYMENT.md     # Deployment guide
+│   └── implementation_notes/
+│       └── PROMPT_SYSTEM_MIGRATION.md
+└── .pi/skills/           # AI coding agent skills
+    └── developing-with-streamlit/
 ```
 
 ---
