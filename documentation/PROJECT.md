@@ -29,6 +29,14 @@ ofl-running-analysis/
 │   ├── generate_chart_code.md # Chart code generation prompt
 │   ├── formulate_answer.md # Answer formulation prompt
 │   └── user/             # User overrides (gitignored)
+├── queries/              # Pre-defined queries (selectable from sidebar)
+│   ├── default_queries/
+│   │   ├── query_1.md   # Pre-defined query 1
+│   │   ├── query_2.md   # Pre-defined query 2
+│   │   ├── query_3.md   # Pre-defined query 3
+│   │   ├── query_4.md   # Pre-defined query 4
+│   │   └── query_5.md   # Pre-defined query 5
+│   └── user/             # User overrides (gitignored)
 ├── Dockerfile            # Container image definition
 ├── docker-compose.yml    # Compose config for container deployment
 ├── .dockerignore         # Excludes local dev artifacts from Docker build context
@@ -124,6 +132,7 @@ Opens in the browser at `http://localhost:8501`. Supports:
 - SQL display, plain-English answer, data table, and chart per question
 - Schema viewer in the sidebar
 - Prompt history (persisted to `prompt_history.json`)
+- Pre-defined queries selector in the sidebar
 - Toggle to enable/disable automatic chart generation
 - Optional password gate via `APP_PASSWORD` env var
 - Clear conversation button
@@ -134,6 +143,10 @@ Access via sidebar navigation → **Config** page. Provides:
 - **Data upload** — upload Garmin CSV to merge new activities (duplicates skipped)
 - **Data download** — export current dataset as CSV
 - **Prompt editor** — edit all AI prompts at runtime
+- **Query editor** — edit all pre-defined queries at runtime
+
+### Pre-defined Queries
+The app includes 5 pre-defined queries that users can select from the sidebar. These appear as buttons showing the query text, and clicking one pre-fills the chat input. Queries can be edited on the Config page, with user overrides saved to `queries/user/`. The original defaults in `queries/default_queries/` are never modified.
 
 ### CLI — Interactive mode
 ```bash

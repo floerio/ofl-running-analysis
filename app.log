@@ -351,3 +351,69 @@ FROM data
 WHERE "Activity Type" = 'Running' AND EXTRACT(YEAR FROM "Date") = 2026
 GROUP BY "Date", "Time", "Avg Pace", "Best Pace", "Moving Time", "Elapsed Time", "Number of Laps"
 ORDER BY "Date";
+2026-08-22 13:58:36 [WARNING] SQL error (attempt 1/3): Parser Error: syntax error at or near "Type"
+
+LINE 3: WHERE Activity Type = 'Running'
+                       ^
+SQL:
+SELECT *
+FROM data
+WHERE Activity Type = 'Running'
+  AND EXTRACT(YEAR FROM Date) = 2025
+2026-08-22 13:58:51 [ERROR] Chart rendering failed: invalid syntax (<string>, line 3)
+Code:
+YES
+
+```python
+import matplotlib.pyplot as plt
+
+# Convert Date to datetime and sort
+df['Date'] = pd.to_datetime(df['Date'])
+df = df.sort_values('Date')
+
+# Plot distance over time
+plt.figure(figsize=(12, 6))
+plt.plot(df['Date'], df['Distance'], marker='o', linestyle='-', color='b')
+plt.title('Running Distance Over Time in 2025')
+plt.xlabel('Date')
+plt.ylabel('Distance (km)')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+plt.gcf().suptitle('Q: "Show all my runs in 2025
+"', fontsize=13, fontweight='bold', y=1.02)
+plt.tight_layout()
+2026-08-22 14:00:09 [WARNING] SQL error (attempt 1/3): Binder Error: column "Title" must appear in the GROUP BY clause or must be part of an aggregate function.
+Either add it to the GROUP BY list, or use "ANY_VALUE(Title)" if the exact value of "Title" is not important.
+
+LINE 12:     Title,
+             ^
+SQL:
+WITH cleaned AS (
+  SELECT
+    Title,
+    TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE) AS distance,
+    TRY_CAST(REPLACE("Total Ascent", ',', '.') AS DOUBLE) AS total_ascent,
+    TRY_CAST(REPLACE("Total Descent", ',', '.') AS DOUBLE) AS total_descent
+  FROM data
+  WHERE "Activity Type" = 'Running'
+),
+grouped AS (
+  SELECT
+    Title,
+    distance,
+    total_ascent,
+    total_descent,
+    COUNT(*) AS count
+  FROM cleaned
+  WHERE distance IS NOT NULL
+    AND total_ascent IS NOT NULL
+    AND total_descent IS NOT NULL
+  GROUP BY
+    ROUND(distance * 10) / 10,
+    ROUND(total_ascent * 10) / 10,
+    ROUND(total_descent * 10) / 10
+)
+SELECT COUNT(*) AS identified_tracks
+FROM grouped
+WHERE count > 1

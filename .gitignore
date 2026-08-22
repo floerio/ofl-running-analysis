@@ -3,4 +3,7 @@
 
 # Prompt system - user overrides
 prompts/user/
+
+# Query system - user overrides
+queries/user/
 .DS_Store

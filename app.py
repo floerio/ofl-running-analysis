@@ -14,6 +14,7 @@ import streamlit as st
 
 from src import core
 from src import prompt_manager
+from src import query_manager
 
 PROMPT_HISTORY_FILE = "prompt_history.json"
 
@@ -108,6 +109,8 @@ if "prompt_prefill" not in st.session_state:
     st.session_state.prompt_prefill = None  # set by prompt history click
 if "prompt_history" not in st.session_state:
     st.session_state.prompt_history = load_prompt_history()
+if "queries" not in st.session_state:
+    st.session_state.queries = query_manager.load_all()
 
 # Initialize selected_model from session state or default
 if "selected_model" not in st.session_state:
@@ -130,6 +133,17 @@ with st.sidebar:
     if st.button("🗑️ Clear conversation"):
         st.session_state.history = []
         st.rerun()
+    st.markdown("---")
+
+    # ── Pre-defined queries ────────────────────────────────────
+    queries = st.session_state.queries
+    with st.expander("Pre-defined queries", expanded=False):
+        for name in query_manager.QUERY_NAMES:
+            query_text = queries.get(name, query_manager.get(name))
+            if st.button(query_text, key=f"query_{name}", use_container_width=True):
+                st.session_state.prompt_prefill = query_text
+                st.rerun()
+
     st.markdown("---")
 
     # ── Prompt history ────────────────────────────────────

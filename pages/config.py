@@ -11,19 +11,27 @@ import streamlit as st
 
 from src import core
 from src import prompt_manager
+from src import query_manager
 
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Configuration", page_icon="⚙️")
 
-# ── Load prompts at startup ───────────────────────────────────────────────────
+# ── Load prompts and queries at startup ───────────────────────────────────────
 if "prompts" not in st.session_state:
     st.session_state["prompts"] = prompt_manager.load_all()
+if "queries" not in st.session_state:
+    st.session_state["queries"] = query_manager.load_all()
 
 
 def get_prompts():
     """Helper to get current prompts."""
     return st.session_state.get("prompts", prompt_manager.load_all())
+
+
+def get_queries():
+    """Helper to get current queries."""
+    return st.session_state.get("queries", query_manager.load_all())
 
 
 # ── Password gate (same as app.py) ──────────────────────────────────────────
@@ -182,5 +190,55 @@ for name in prompt_manager.PROMPT_NAMES:
                 ):
                     prompt_manager.revert(name)
                     st.session_state["prompts"] = prompt_manager.load_all()
+                    st.success("Reverted to original.")
+                    st.rerun()
+
+st.markdown("---")
+
+# ── Query editor ─────────────────────────────────────────────────────────────
+st.header("🔍 Pre-defined Queries")
+st.caption(
+    "Edit the pre-defined queries. Changes take effect immediately and are saved to "
+    "`queries/user/`. The original files in `queries/default_queries/` are never modified. "
+    "Revert restores the original at any time."
+)
+
+queries = get_queries()
+
+for name in query_manager.QUERY_NAMES:
+    meta = query_manager.QUERY_META[name]
+    modified = query_manager.is_modified(name)
+
+    badge = "📝 **Modified**" if modified else "✅ Original"
+    with st.expander(f"**{meta['title']}** — {badge}", expanded=False):
+        st.caption(meta["description"])
+
+        current_text = queries.get(name, query_manager.get(name))
+        edited_text = st.text_area(
+            "Query text",
+            value=current_text,
+            height=100,
+            key=f"query_editor_{name}",
+            label_visibility="collapsed",
+        )
+
+        col_save, col_revert, _ = st.columns([1, 1, 4])
+
+        with col_save:
+            if st.button("Save", key=f"save_query_{name}", use_container_width=True):
+                query_manager.save_user(name, edited_text)
+                st.session_state["queries"] = query_manager.load_all()
+                st.success("Saved.")
+                st.rerun()
+
+        with col_revert:
+            if modified:
+                if st.button(
+                    "Revert",
+                    key=f"revert_query_{name}",
+                    use_container_width=True,
+                ):
+                    query_manager.revert(name)
+                    st.session_state["queries"] = query_manager.load_all()
                     st.success("Reverted to original.")
                     st.rerun()

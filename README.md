@@ -157,6 +157,14 @@ ofl-running-analysis/
 │   ├── generate_chart_code.md
 │   └── formulate_answer.md
 │   └── user/             # User overrides (gitignored)
+├── queries/              # Pre-defined queries
+│   ├── default_queries/
+│   │   ├── query_1.md
+│   │   ├── query_2.md
+│   │   ├── query_3.md
+│   │   ├── query_4.md
+│   │   └── query_5.md
+│   └── user/             # User overrides (gitignored)
 ├── data.csv              # Garmin running export
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile
