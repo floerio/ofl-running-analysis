@@ -10,6 +10,10 @@ first compute the window function result in a CTE or subquery, then aggregate ov
 result in an outer query. Alternatively, prefer DuckDB's built-in aggregate statistics 
 functions when they fit (e.g. corr(y, x), regr_slope(y, x), regr_intercept(y, x), stddev, 
 variance) instead of manually reimplementing them.
+- When the schema description includes "Possible values" for a column, ALWAYS use one of those exact values 
+  (case-sensitive) in your WHERE clauses. For example, if "Activity Type" has possible values "Running, Other", 
+  use WHERE "Activity Type" = 'Running', not 'Run' or 'running'.
+- DO NOT use column aliases (AS) in your SELECT statements. The chart generation code needs to reference the actual column names from the database. Use the actual column names directly.
 
 Schema description for reference:
 {schema_description}

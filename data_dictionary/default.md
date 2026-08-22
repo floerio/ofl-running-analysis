@@ -4,6 +4,7 @@ attributes:
     type: string
     description: Type of physical activity performed
     optional_names: activity_type,activity
+    possible_values: Running,Other,Cycling,Walking
 
   - name: Date
     type: datetime
@@ -14,6 +15,7 @@ attributes:
     type: boolean
     description: "Whether the activity is marked as a favorite (0 = no, 1 = yes)"
     optional_names: is_favorite,favorite_flag
+    possible_values: 0,1
 
   - name: Title
     type: string

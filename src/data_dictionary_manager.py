@@ -94,17 +94,18 @@ def format_schema(dictionary: dict) -> str:
     if not dictionary or "attributes" not in dictionary:
         return "No schema information available."
     
-    lines = ["Schema:"]
+    lines = ["Schema (actual column names in database):"]
     for attr in dictionary["attributes"]:
         name = attr.get("name", "")
         data_type = attr.get("type", "")
         description = attr.get("description", "")
         optional_names = attr.get("optional_names", "")
+        possible_values = attr.get("possible_values", "")
         
         # Build the main line
-        main_line = f"{name} ({data_type}): {description}"
+        main_line = f"  {name} ({data_type}): {description}"
         
-        # Add optional names if present
+        # Add optional names if present - these are for user reference only
         if optional_names and optional_names != "null" and optional_names != "":
             # Handle both string and list
             if isinstance(optional_names, str):
@@ -113,7 +114,18 @@ def format_schema(dictionary: dict) -> str:
                 names_list = optional_names
             
             if names_list:
-                main_line += f" Optional names: {', '.join(names_list)}"
+                main_line += f" (user can also say: {', '.join(names_list)})"
+        
+        # Add possible values if present
+        if possible_values and possible_values != "null" and possible_values != "":
+            # Handle both string and list
+            if isinstance(possible_values, str):
+                values_list = [v.strip() for v in possible_values.split(",") if v.strip()]
+            else:
+                values_list = possible_values
+            
+            if values_list:
+                main_line += f" Possible values: {', '.join(values_list)}"
         
         lines.append(main_line)
     

@@ -1,4 +1,4 @@
-#!/Users/iteratec/Projects/ofl-running-analysis/.venv/bin/python3
+#!/Users/oliver/Projects/ofl-running-analysis/.venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

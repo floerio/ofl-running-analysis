@@ -1,4 +1,5 @@
 /.env
+/.venv
 /prompt_history.json
 
 # Prompt system - user overrides
