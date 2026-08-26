@@ -13,7 +13,8 @@ variance) instead of manually reimplementing them.
 - When the schema description includes "Possible values" for a column, ALWAYS use one of those exact values 
   (case-sensitive) in your WHERE clauses. For example, if "Activity Type" has possible values "Running, Other", 
   use WHERE "Activity Type" = 'Running', not 'Run' or 'running'.
-- DO NOT use column aliases (AS) in your SELECT statements. The chart generation code needs to reference the actual column names from the database. Use the actual column names directly.
+- DO alias computed and aggregated columns with short, clean names (e.g. COUNT(*) AS run_count, AVG(...) AS avg_distance). This is required — without an alias, DuckDB names them things like count_star() which breaks chart code.
+- Do NOT alias existing source columns that already have a name (e.g. do not write "Elapsed Time" AS duration). Use the original column name directly so chart code can reference it.
 
 Schema description for reference:
 {schema_description}
