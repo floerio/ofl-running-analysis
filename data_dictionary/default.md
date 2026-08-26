@@ -1,174 +1,137 @@
----
-attributes:
-  - name: Activity Type
-    type: string
-    description: Type of physical activity performed
-    optional_names: activity_type,activity
-    possible_values: Running,Other,Cycling,Walking
+# Data Dictionary
 
-  - name: Date
-    type: datetime
-    description: "Date and time when the activity started (format: YYYY-MM-DD HH:MM:SS)"
-    optional_names: start_date,start_time,activity_date,timestamp
+## Activity Type
+**Label:** Activity Type
+**Description:** The type of physical activity (e.g. Running, Trail Running, Indoor Running, Cycling, Walking). Use exact values in WHERE clauses — they are case-sensitive.
 
-  - name: Favorite
-    type: boolean
-    description: "Whether the activity is marked as a favorite (0 = no, 1 = yes)"
-    optional_names: is_favorite,favorite_flag
-    possible_values: 0,1
+## Date
+**Label:** Date
+**Description:** Date and time when the activity started, format YYYY-MM-DD HH:MM:SS. Use strftime or date_trunc for grouping by day, month, or year.
 
-  - name: Title
-    type: string
-    description: User-given title or description of the activity
-    optional_names: activity_title,name,description
+## Favorite
+**Label:** Favorite
+**Description:** Whether the activity is marked as a favorite (0 = no, 1 = yes).
 
-  - name: Distance
-    type: float
-    description: Total distance covered during the activity in kilometers
-    optional_names: distance_km,total_distance,distance
+## Title
+**Label:** Title
+**Description:** User-given name or description of the activity (e.g. "Hamburg Morning Run", "Race"). Free text — use ILIKE for fuzzy matching.
 
-  - name: Calories
-    type: integer
-    description: Total calories burned during the activity
-    optional_names: total_calories,calories_burned,energy
+## Distance
+**Label:** Distance (km)
+**Description:** Total distance covered in kilometres. Stored with a comma decimal separator in the source CSV (e.g. "8,76") — always use REPLACE("Distance", ',', '.') before casting to DOUBLE.
 
-  - name: Time
-    type: duration
-    description: "Total duration of the activity (format: HH:MM:SS)"
-    optional_names: duration,total_time,activity_time
+## Calories
+**Label:** Calories (kcal)
+**Description:** Total calories burned during the activity.
 
-  - name: Avg HR
-    type: integer
-    description: Average heart rate in beats per minute during the activity
-    optional_names: avg_heart_rate,average_hr,mean_hr
+## Time
+**Label:** Duration (HH:MM:SS)
+**Description:** Total duration of the activity in HH:MM:SS format. Use epoch/interval functions to compare durations numerically.
 
-  - name: Max HR
-    type: integer
-    description: Maximum heart rate in beats per minute during the activity
-    optional_names: max_heart_rate,peak_hr,highest_hr
+## Avg HR
+**Label:** Average Heart Rate (bpm)
+**Description:** Average heart rate in beats per minute. Useful for intensity analysis; typical easy-run range is 130–150 bpm.
 
-  - name: Aerobic TE
-    type: float
-    description: Aerobic Training Effect score (measure of cardiovascular benefit)
-    optional_names: aerobic_training_effect,ate,cardio_score
+## Max HR
+**Label:** Maximum Heart Rate (bpm)
+**Description:** Peak heart rate in beats per minute recorded during the activity.
 
-  - name: Avg Run Cadence
-    type: integer
-    description: Average running cadence in steps per minute
-    optional_names: avg_cadence,average_cadence,steps_per_minute,spm
+## Aerobic TE
+**Label:** Aerobic Training Effect
+**Description:** Garmin Aerobic Training Effect score (0–5) measuring cardiovascular benefit of the session.
 
-  - name: Max Run Cadence
-    type: integer
-    description: Maximum running cadence in steps per minute
-    optional_names: max_cadence,peak_cadence,highest_cadence
+## Avg Run Cadence
+**Label:** Average Cadence (spm)
+**Description:** Average running cadence in steps per minute. Optimal range is generally 170–180 spm.
 
-  - name: Avg Pace
-    type: duration
-    description: "Average pace per kilometer (format: MM:SS)"
-    optional_names: avg_pace,average_pace,pace
+## Max Run Cadence
+**Label:** Maximum Cadence (spm)
+**Description:** Maximum running cadence in steps per minute during the activity.
 
-  - name: Best Pace
-    type: duration
-    description: "Best (fastest) pace achieved during the activity (format: MM:SS)"
-    optional_names: best_pace,fastest_pace,min_pace
+## Avg Pace
+**Label:** Average Pace (MM:SS /km)
+**Description:** Average pace per kilometre in MM:SS format (e.g. "5:30" means 5 minutes 30 seconds per km). Use safe_pace_to_seconds() for numeric comparisons.
 
-  - name: Total Ascent
-    type: integer
-    description: Total elevation gain in meters during the activity
-    optional_names: total_ascent,elevation_gain,ascent,climb
+## Best Pace
+**Label:** Best Pace (MM:SS /km)
+**Description:** Fastest pace achieved during the activity in MM:SS format.
 
-  - name: Total Descent
-    type: integer
-    description: Total elevation loss in meters during the activity
-    optional_names: total_descent,elevation_loss,descent,drop
+## Total Ascent
+**Label:** Total Ascent (m)
+**Description:** Total elevation gain in metres. Relevant for hilly or trail runs.
 
-  - name: Avg Stride Length
-    type: float
-    description: Average stride length in meters
-    optional_names: avg_stride_length,average_stride,stride
+## Total Descent
+**Label:** Total Descent (m)
+**Description:** Total elevation loss in metres.
 
-  - name: Avg Vertical Ratio
-    type: float
-    description: "Average vertical ratio (vertical oscillation divided by stride length, as percentage)"
-    optional_names: avg_vertical_ratio,vertical_ratio
+## Avg Stride Length
+**Label:** Average Stride Length (m)
+**Description:** Average stride length in metres. Longer strides at lower cadence can indicate fatigue.
 
-  - name: Avg Vertical Oscillation
-    type: float
-    description: Average vertical oscillation in centimeters (bounce height)
-    optional_names: avg_vertical_oscillation,vertical_oscillation,bounce
+## Avg Vertical Ratio
+**Label:** Average Vertical Ratio (%)
+**Description:** Vertical oscillation divided by stride length, expressed as a percentage. Lower is more efficient (typical range 6–10%).
 
-  - name: Avg Ground Contact Time
-    type: integer
-    description: Average ground contact time in milliseconds
-    optional_names: avg_ground_contact,ground_contact_time,contact_time
+## Avg Vertical Oscillation
+**Label:** Average Vertical Oscillation (cm)
+**Description:** Average bounce height in centimetres per step. Lower values indicate better running economy (typical range 6–13 cm).
 
-  - name: Avg GAP
-    type: float
-    description: "Average Ground contact time to Air time ratio (GAP)"
-    optional_names: avg_gap,gap_ratio
+## Avg Ground Contact Time
+**Label:** Average Ground Contact Time (ms)
+**Description:** Average time the foot is in contact with the ground per step, in milliseconds. Lower values indicate a more efficient stride (typical range 160–300 ms).
 
-  - name: Normalized Power
-    type: integer
-    description: Normalized Power - adjusted power output accounting for intensity variations
-    optional_names: normalized_power,np,normalized_power
+## Avg GAP
+**Label:** Average Grade-Adjusted Pace (MM:SS /km)
+**Description:** Pace adjusted for gradient, making uphill and downhill efforts comparable.
 
-  - name: Training Stress Score
-    type: float
-    description: Training Stress Score measuring workout intensity and volume
-    optional_names: training_stress_score,tss,stress_score
+## Normalized Power® (NP®)
+**Label:** Normalized Power (W)
+**Description:** Power output normalised for intensity variations, in watts. Gives a better measure of effort than average power alone.
 
-  - name: Avg Power
-    type: integer
-    description: Average power output in watts during the activity
-    optional_names: avg_power,average_power,mean_power
+## Training Stress Score®
+**Label:** Training Stress Score (TSS)
+**Description:** Garmin Training Stress Score — measures workout intensity and volume. Higher TSS means more physiological stress.
 
-  - name: Max Power
-    type: integer
-    description: Maximum power output in watts during the activity
-    optional_names: max_power,peak_power,highest_power
+## Avg Power
+**Label:** Average Power (W)
+**Description:** Average power output in watts during the activity.
 
-  - name: Steps
-    type: integer
-    description: Total number of steps taken during the activity
-    optional_names: total_steps,step_count
+## Max Power
+**Label:** Maximum Power (W)
+**Description:** Peak power output in watts during the activity.
 
-  - name: Body Battery Drain
-    type: integer
-    description: Change in body battery energy reserves (negative values indicate drain)
-    optional_names: body_battery_drain,energy_drain,battery_change
+## Steps
+**Label:** Total Steps
+**Description:** Total number of steps taken during the activity.
 
-  - name: Decompression
-    type: integer
-    description: Decompression time in minutes (recovery time needed)
-    optional_names: decompression,recovery_time
+## Body Battery Drain
+**Label:** Body Battery Drain
+**Description:** Change in Garmin Body Battery energy reserves. Negative values (e.g. -15) indicate energy drained. Raw values in the CSV may include a leading quote (e.g. `'-15`) — handled by ignore_errors=true on CSV load.
 
-  - name: Best Lap Time
-    type: duration
-    description: "Time of the fastest lap (format: MM:SS)"
-    optional_names: best_lap_time,fastest_lap
+## Decompression
+**Label:** Decompression
+**Description:** Decompression indicator (dive-related field from Garmin; typically empty for running activities).
 
-  - name: Number of Laps
-    type: integer
-    description: Total number of laps completed during the activity
-    optional_names: num_laps,lap_count,total_laps
+## Best Lap Time
+**Label:** Best Lap Time (MM:SS)
+**Description:** Time of the fastest lap in MM:SS format.
 
-  - name: Moving Time
-    type: duration
-    description: "Total time spent moving (excluding pauses, format: HH:MM:SS)"
-    optional_names: moving_time,active_time
+## Number of Laps
+**Label:** Number of Laps
+**Description:** Total number of laps completed during the activity.
 
-  - name: Elapsed Time
-    type: duration
-    description: "Total elapsed time including pauses (format: HH:MM:SS)"
-    optional_names: elapsed_time,total_time,wall_time
+## Moving Time
+**Label:** Moving Time (HH:MM:SS)
+**Description:** Total time spent actively moving, excluding pauses, in HH:MM:SS format.
 
-  - name: Min Elevation
-    type: integer
-    description: Minimum elevation in meters during the activity
-    optional_names: min_elevation,lowest_point,min_altitude
+## Elapsed Time
+**Label:** Elapsed Time (HH:MM:SS)
+**Description:** Total wall-clock time from start to finish including pauses, in HH:MM:SS format.
 
-  - name: Max Elevation
-    type: integer
-    description: Maximum elevation in meters during the activity
-    optional_names: max_elevation,highest_point,max_altitude
----
+## Min Elevation
+**Label:** Minimum Elevation (m)
+**Description:** Lowest elevation point reached during the activity, in metres above sea level.
+
+## Max Elevation
+**Label:** Maximum Elevation (m)
+**Description:** Highest elevation point reached during the activity, in metres above sea level.

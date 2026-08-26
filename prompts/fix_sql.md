@@ -1,7 +1,7 @@
-<!-- Available placeholders: {sql}, {error}, {schema}, {schema_description}, {sql_guidelines} -->
+<!-- Available placeholders: {sql}, {error}, {schema}, {data_dictionary}, {sql_guidelines} -->
 You are a SQL expert using DuckDB. The following SQL query failed with an error.
 
-{schema_description}
+{data_dictionary}
 
 {sql_guidelines}
 Failed SQL:

@@ -38,11 +38,15 @@ CSV_FILE = "data.csv"
 PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
+LLM_RESULT_ROW_LIMIT = 200
+
 # Load prompts and data dictionary at module level (shared across all instances)
 # This is loaded once when core.py is first imported
 from . import data_dictionary_manager
+from . import business_glossary_manager
 PROMPTS = prompt_manager.load_all()
-SCHEMA_DESCRIPTION = data_dictionary_manager.get_schema_description()
+DATA_DICTIONARY = data_dictionary_manager.load()
+BUSINESS_GLOSSARY = business_glossary_manager.load()
 
 # Models that are NOT chat/completion models — excluded from the selector
 _EXCLUDED_MODEL_KEYWORDS = [
@@ -213,6 +217,25 @@ def save_uploaded_file(uploaded_file, save_path: str) -> str:
     return save_path
 
 
+# ── Result formatting for LLM prompts ───────────────────────────────────────
+def format_result_for_prompt(df: pd.DataFrame) -> str:
+    """Format a query result DataFrame as a text table for injection into LLM prompts.
+
+    Truncates to LLM_RESULT_ROW_LIMIT rows and appends a note when the result
+    is larger, so the LLM is aware it is seeing a partial result.
+    """
+    if df.empty:
+        return "No results found."
+    if len(df) <= LLM_RESULT_ROW_LIMIT:
+        return df.to_string(index=False)
+    truncated = df.head(LLM_RESULT_ROW_LIMIT).to_string(index=False)
+    return (
+        f"{truncated}\n\n"
+        f"[Result truncated: showing {LLM_RESULT_ROW_LIMIT} of {len(df)} rows. "
+        "The full result is available in the data table below.]"
+    )
+
+
 # ── Step 1: Inspect Parquet schema for the LLM ──────────────────────────────
 def get_schema(parquet_file: str = PARQUET_FILE) -> str:
     con = duckdb.connect()
@@ -288,7 +311,7 @@ Use the context above to resolve what "that" or "this" refers to.
         prompts,
         question=question,
         schema=schema,
-        schema_description=SCHEMA_DESCRIPTION,
+        data_dictionary=DATA_DICTIONARY,
         sql_guidelines=prompts.get("sql_guidelines", ""),
         history_section=history_section,
     )
@@ -325,7 +348,7 @@ def fix_sql(sql: str, error: str, schema: str, model: str = MODEL, prompts: Opti
         sql=sql,
         error=error,
         schema=schema,
-        schema_description=SCHEMA_DESCRIPTION,
+        data_dictionary=DATA_DICTIONARY,
         sql_guidelines=prompts.get("sql_guidelines", ""),
     )
     
@@ -391,13 +414,13 @@ def generate_chart_code(question: str, result_df: pd.DataFrame, model: str = MOD
     if prompts is None:
         prompts = PROMPTS
     
-    result_str = result_df.to_string(index=False)
+    result_str = format_result_for_prompt(result_df)
     rendered_prompt = prompt_manager.render(
         "generate_chart_code",
         prompts,
         question=question,
         result_str=result_str,
-        schema_description=SCHEMA_DESCRIPTION,
+        data_dictionary=DATA_DICTIONARY,
     )
     
     result = call_llm(rendered_prompt, model=model)
@@ -487,7 +510,7 @@ def formulate_answer(question: str, result_df: pd.DataFrame, history: Optional[l
     if prompts is None:
         prompts = PROMPTS
     
-    result_str = result_df.to_string(index=False) if not result_df.empty else "No results found."
+    result_str = format_result_for_prompt(result_df)
     history_block = _format_history_for_prompt(history or [])
     history_section = f"""
 {history_block}
@@ -500,10 +523,110 @@ The user may refer to previous questions. Use the context above if needed.
         prompts,
         question=question,
         result_str=result_str,
-        schema_description=SCHEMA_DESCRIPTION,
+        data_dictionary=DATA_DICTIONARY,
         history_section=history_section,
     )
     
+    return call_llm(rendered_prompt, model=model)
+
+
+# ── Feature 10: Follow-up Suggestions ───────────────────────────────────────
+def generate_followup_suggestions(question: str, result_df: pd.DataFrame, model: str = MODEL, prompts: Optional[dict] = None) -> list[str]:
+    """Generate up to 5 follow-up question suggestions based on the answer.
+
+    Returns a list of suggestion strings, or [] on any error.
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    try:
+        result_str = format_result_for_prompt(result_df)
+        rendered_prompt = prompt_manager.render(
+            "suggest_followups",
+            prompts,
+            question=question,
+            result_str=result_str,
+        )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": rendered_prompt}],
+            temperature=0.3,
+        )
+        raw = response.choices[0].message.content.strip()
+        suggestions = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Strip leading numbering ("1. ", "- ", "* ")
+            line = re.sub(r"^[\d]+\.\s*", "", line)
+            line = re.sub(r"^[-*]\s*", "", line)
+            if line:
+                suggestions.append(line)
+        return suggestions[:5]
+    except Exception as e:
+        logger.warning("generate_followup_suggestions failed: %s", e)
+        return []
+
+
+# ── Feature 11: Chat Mode ─────────────────────────────────────────────────────
+def classify_intent(question: str, last_question: str, last_result_preview: str, history: Optional[list] = None, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Classify user intent as NEW_QUERY, FOLLOWUP, or UNCLEAR.
+
+    Always returns a valid value — never raises.
+    """
+    if prompts is None:
+        prompts = PROMPTS
+    try:
+        history_section = _format_history_for_prompt(history or [])
+        rendered_prompt = prompt_manager.render(
+            "chat_intent",
+            prompts,
+            question=question,
+            last_question=last_question,
+            last_result_preview=last_result_preview,
+            history_section=history_section,
+        )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": rendered_prompt}],
+            temperature=0,
+        )
+        intent = response.choices[0].message.content.strip().upper()
+        if intent not in ("NEW_QUERY", "FOLLOWUP", "UNCLEAR"):
+            return "NEW_QUERY"
+        return intent
+    except Exception as e:
+        logger.warning("classify_intent failed: %s", e)
+        return "NEW_QUERY"
+
+
+def formulate_followup_answer(question: str, last_question: str, last_result: str, history: Optional[list] = None, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Generate a conversational answer for a FOLLOWUP question (no SQL)."""
+    if prompts is None:
+        prompts = PROMPTS
+    history_section = _format_history_for_prompt(history or [])
+    rendered_prompt = prompt_manager.render(
+        "chat_followup",
+        prompts,
+        question=question,
+        last_question=last_question,
+        last_result=last_result,
+        history_section=history_section,
+    )
+    return call_llm(rendered_prompt, model=model)
+
+
+def formulate_general_answer(question: str, history: Optional[list] = None, model: str = MODEL, prompts: Optional[dict] = None) -> str:
+    """Generate a conversational answer for UNCLEAR questions (no SQL)."""
+    if prompts is None:
+        prompts = PROMPTS
+    history_section = _format_history_for_prompt(history or [])
+    rendered_prompt = prompt_manager.render(
+        "chat_general",
+        prompts,
+        question=question,
+        history_section=history_section,
+    )
     return call_llm(rendered_prompt, model=model)
 
 

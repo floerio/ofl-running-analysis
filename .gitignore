@@ -2,6 +2,10 @@
 /.venv
 /prompt_history.json
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # Prompt system - user overrides
 prompts/user/
 
@@ -10,5 +14,6 @@ queries/user/
 
 # Data dictionary - user overrides
 data_dictionary/user/
+business_glossary/user/
 .DS_Store
 .DS_Store

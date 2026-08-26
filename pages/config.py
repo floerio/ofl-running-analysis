@@ -13,6 +13,8 @@ from src import core
 from src import prompt_manager
 from src import query_manager
 from src import data_dictionary_manager
+from src import business_glossary_manager
+from src import ui_utils
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +22,12 @@ st.set_page_config(page_title="Configuration", page_icon="⚙️")
 
 # ── Load prompts, queries, and data dictionary at startup ──────────────────
 if "prompts" not in st.session_state:
-    st.session_state["prompts"] = prompt_manager.load_all()
+    _prompts = prompt_manager.load_all()
+    _prompts["data_dictionary"] = data_dictionary_manager.load()
+    _prompts["business_glossary"] = business_glossary_manager.load()
+    st.session_state["prompts"] = _prompts
 if "queries" not in st.session_state:
     st.session_state["queries"] = query_manager.load_all()
-if "data_dictionary" not in st.session_state:
-    st.session_state["data_dictionary"] = data_dictionary_manager.load()
 
 
 def get_prompts():
@@ -37,32 +40,7 @@ def get_queries():
     return st.session_state.get("queries", query_manager.load_all())
 
 
-def get_data_dictionary():
-    """Helper to get current data dictionary."""
-    return st.session_state.get("data_dictionary", data_dictionary_manager.load())
-
-
-# ── Password gate (same as app.py) ──────────────────────────────────────────
-def check_password() -> bool:
-    app_password = os.getenv("APP_PASSWORD")
-    if not app_password:
-        return True  # no password configured -> open access
-
-    if st.session_state.get("authenticated"):
-        return True
-
-    st.title("🔒 AI Data Assistant")
-    pwd = st.text_input("Password", type="password")
-    if st.button("Log in"):
-        if pwd == app_password:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Wrong password")
-    return False
-
-
-if not check_password():
+if not ui_utils.check_password():
     st.stop()
 
 
@@ -87,6 +65,53 @@ st.session_state.selected_model = st.selectbox(
     options=available_models,
     index=default_idx,
 )
+
+st.markdown("---")
+
+# ── Chart generation ────────────────────────────────────────────────────
+st.header("📊 Chart Generation")
+st.caption(
+    "When enabled, a chart is automatically generated after each answer. "
+    "When disabled, a ‘📊 Generate chart’ button appears on the chat page so you can trigger it on demand."
+)
+st.session_state.setdefault("generate_chart", False)
+st.session_state.generate_chart = st.toggle(
+    "Auto-generate charts",
+    value=st.session_state.generate_chart,
+)
+
+st.markdown("---")
+
+# ── Follow-up Suggestions ────────────────────────────────────────
+st.header("💡 Follow-up Suggestions")
+st.caption(
+    "When enabled, the AI generates 5 clickable follow-up questions after each answer. "
+    "Click any suggestion to pre-fill the chat input."
+)
+st.session_state.setdefault("show_suggestions", True)
+st.session_state.show_suggestions = st.toggle(
+    "Enable follow-up suggestions",
+    value=st.session_state.show_suggestions,
+)
+
+st.markdown("---")
+
+# ── Chat Mode ───────────────────────────────────────────────────
+st.header("💬 Chat Mode")
+st.caption(
+    "When enabled, the AI classifies each question as a new data query or a follow-up. "
+    'Follow-up questions (e.g. "why is that?", "explain this") are answered conversationally '
+    "without running a new SQL query."
+)
+st.session_state.setdefault("chat_mode", False)
+st.session_state.chat_mode = st.toggle(
+    "Enable Chat Mode",
+    value=st.session_state.chat_mode,
+)
+if st.session_state.chat_mode:
+    st.success("💬 Chat Mode is **ON** — follow-up questions skip the SQL pipeline")
+else:
+    st.info("⚪ Chat Mode is **OFF** — every question runs a full SQL query")
 
 st.markdown("---")
 
@@ -156,20 +181,26 @@ for name in prompt_manager.PROMPT_NAMES:
 
         if meta["placeholders"]:
             st.markdown("**Available placeholders:**")
-            rows = "".join(
-                f"<tr><td><code>{ph}</code></td><td>{desc}</td></tr>"
-                for ph, desc in meta["placeholders"]
+            rows_html = "".join(
+                f"""
+                <tr style='background:{'#f9f9f9' if i % 2 == 0 else 'transparent'}'>
+                  <td style='padding:5px 10px;font-family:monospace;font-size:0.85em;
+                             white-space:nowrap;vertical-align:top;width:200px'>{ph}</td>
+                  <td style='padding:5px 10px;font-size:0.85em;vertical-align:top'>{desc}</td>
+                </tr>"""
+                for i, (ph, desc) in enumerate(meta["placeholders"])
             )
             st.markdown(
-                f"""<table style='font-size:0.85em;border-collapse:collapse;width:100%'>
-                <thead><tr>
-                <th style='text-align:left;padding:4px 8px;border-bottom:1px solid #ddd;width:180px'>Placeholder</th>
-                <th style='text-align:left;padding:4px 8px;border-bottom:1px solid #ddd'>Description</th>
+                f"""<table style='border-collapse:collapse;width:100%;margin-bottom:8px'>
+                <thead><tr style='border-bottom:2px solid #ddd'>
+                  <th style='text-align:left;padding:5px 10px;font-size:0.85em;width:200px'>Placeholder</th>
+                  <th style='text-align:left;padding:5px 10px;font-size:0.85em'>Description</th>
                 </tr></thead>
-                <tbody>{rows}</tbody></table>""",
+                <tbody>{rows_html}</tbody></table>""",
                 unsafe_allow_html=True,
             )
-            st.markdown("")
+        else:
+            st.caption("ℹ️ This is a shared block injected into other prompts. It has no placeholders of its own.")
 
         current_text = prompts.get(name, prompt_manager.get(name))
         edited_text = st.text_area(
@@ -254,60 +285,93 @@ for name in query_manager.QUERY_NAMES:
 st.markdown("---")
 
 # ── Data Dictionary editor ───────────────────────────────────────────────────
-st.header("📊 Data Dictionary")
+dd_modified = data_dictionary_manager.is_modified()
+dd_badge = "📝 **Modified**" if dd_modified else "✅ Original"
+
+st.header(f"📝 Data Dictionary — {dd_badge}")
 st.caption(
-    "Edit the data dictionary that describes your data columns. This helps the AI "
-    "understand your data structure. Changes take effect immediately. "
-    "The original file in `data_dictionary/default.md` is never modified."
+    "Describes each column in plain English. Injected into all LLM prompts as `{data_dictionary}` "
+    "so the AI understands ambiguous column names, units, and quirks. "
+    "Changes take effect immediately. The original `data_dictionary/default.md` is never modified."
+)
+st.caption(
+    "Format: use `## Exact Column Name` as headings, then `**Label:**` and `**Description:**` fields."
 )
 
-st.markdown("**Note:** Edit the YAML frontmatter directly. The format is:")
-st.code("""
----
-attributes:
-  - name: Column Name
-    type: data type
-    description: Description of the column
-    optional_names: comma,separated,alternatives
----
-""", language="yaml")
-
-data_dict = get_data_dictionary()
-
-# Get the raw YAML content
-import yaml
-yaml_content = yaml.dump(
-    data_dict,
-    sort_keys=False,
-    default_flow_style=False,
-    allow_unicode=True
-)
-
-# Display the YAML in a text area
-edited_yaml = st.text_area(
-    "Data Dictionary YAML",
-    value=yaml_content,
-    height=400,
+current_dd = data_dictionary_manager.load()
+edited_dd = st.text_area(
+    "Data Dictionary",
+    value=current_dd,
+    height=500,
     key="data_dict_editor",
     label_visibility="collapsed",
 )
 
-col_save, col_revert = st.columns(2)
+col_save, col_revert, _ = st.columns([1, 1, 4])
 
 with col_save:
-    if st.button("💾 Save Data Dictionary", use_container_width=True):
-        try:
-            data_dictionary_manager.save_user(edited_yaml)
-            st.session_state["data_dictionary"] = data_dictionary_manager.load()
-            st.success("Data dictionary saved!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Failed to save: {e}")
+    if st.button("Save", key="save_data_dict", use_container_width=True):
+        data_dictionary_manager.save_user(edited_dd)
+        # Re-inject into prompts session state so it takes effect immediately
+        prompts = get_prompts()
+        prompts["data_dictionary"] = data_dictionary_manager.load()
+        st.session_state["prompts"] = prompts
+        st.success("Saved.")
+        st.rerun()
 
 with col_revert:
-    if data_dictionary_manager.is_modified():
-        if st.button("🔄 Revert to Default", use_container_width=True):
+    if dd_modified:
+        if st.button("Revert", key="revert_data_dict", use_container_width=True):
             data_dictionary_manager.revert()
-            st.session_state["data_dictionary"] = data_dictionary_manager.load()
-            st.success("Reverted to default.")
+            prompts = get_prompts()
+            prompts["data_dictionary"] = data_dictionary_manager.load()
+            st.session_state["prompts"] = prompts
+            st.success("Reverted to original.")
+            st.rerun()
+
+st.markdown("---")
+
+# ── Business Glossary editor ─────────────────────────────────────────────────
+bg_modified = business_glossary_manager.is_modified()
+bg_badge = "📝 **Modified**" if bg_modified else "✅ Original"
+
+st.header(f"📖 Business Glossary — {bg_badge}")
+st.caption(
+    "Defines running-specific terms, Garmin metric names, and common phrasings. "
+    "Injected into SQL generation and answer formulation prompts as `{business_glossary}` "
+    "so the AI correctly maps informal questions to the right columns. "
+    "Changes take effect immediately. The original `business_glossary/default.md` is never modified."
+)
+st.caption(
+    "Format: use `## Term Name` as headings, then `**Refers to:**`, `**Maps to:**`, and optional `**Notes:**` fields."
+)
+
+current_bg = business_glossary_manager.load()
+edited_bg = st.text_area(
+    "Business Glossary",
+    value=current_bg,
+    height=500,
+    key="business_glossary_editor",
+    label_visibility="collapsed",
+)
+
+col_save, col_revert, _ = st.columns([1, 1, 4])
+
+with col_save:
+    if st.button("Save", key="save_business_glossary", use_container_width=True):
+        business_glossary_manager.save_user(edited_bg)
+        prompts = get_prompts()
+        prompts["business_glossary"] = business_glossary_manager.load()
+        st.session_state["prompts"] = prompts
+        st.success("Saved.")
+        st.rerun()
+
+with col_revert:
+    if bg_modified:
+        if st.button("Revert", key="revert_business_glossary", use_container_width=True):
+            business_glossary_manager.revert()
+            prompts = get_prompts()
+            prompts["business_glossary"] = business_glossary_manager.load()
+            st.session_state["prompts"] = prompts
+            st.success("Reverted to original.")
             st.rerun()

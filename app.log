@@ -424,3 +424,121 @@ LINE 1: SELECT * FROM data WHERE activity_type = 'Run' ORDER BY date DESC LIMIT 
                                  ^
 SQL:
 SELECT * FROM data WHERE activity_type = 'Run' ORDER BY date DESC LIMIT 1;
+2026-08-26 07:59:29 [ERROR] Chart rendering failed: invalid syntax (<string>, line 3)
+Code:
+YES
+
+```python
+import matplotlib.pyplot as plt
+
+# Convert Distance to numeric (replace comma with dot)
+df['Distance'] = df['Distance'].str.replace(',', '.').astype(float)
+
+# Sort by distance descending and take top 10
+top_runs = df.sort_values('Distance', ascending=False).head(10)
+
+# Create bar chart
+plt.figure(figsize=(12, 6))
+bars = plt.bar(top_runs['Date'].astype(str), top_runs['Distance'], color='skyblue')
+
+# Add value labels on top of each bar
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2., height,
+             f'{height:.2f} km',
+             ha='center', va='bottom')
+
+plt.title('Top 10 Longest Runs in 2024', fontsize=14)
+plt.xlabel('Date', fontsize=12)
+plt.ylabel('Distance (km)', fontsize=12)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.gcf().suptitle('Q: "show me the longest runs in 2024"', fontsize=13, fontweight='bold', y=1.02)
+plt.tight_layout()
+2026-08-26 07:59:29 [ERROR] PDF export failed for history item 0 (question: 'show me the longest runs in 2024'): No module named 'reportlab'
+2026-08-26 08:03:40 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2024'): No module named 'reportlab'
+2026-08-26 08:35:50 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:37:35 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:38:12 [WARNING] SQL error (attempt 1/3): Binder Error: Referenced column "%Y" not found in FROM clause!
+Candidate bindings: "Date"
+
+LINE 12:     AND strftime("%Y", "Date") = '2025'
+                          ^
+SQL:
+SELECT
+    CASE
+        WHEN "Title" ILIKE '%Gremersdorf%' THEN 'Gremersdorf'
+        WHEN "Title" ILIKE '%Kungälv%' OR "Title" ILIKE '%Kungalv%' THEN 'Kungälv'
+        ELSE 'Hamburg'
+    END AS location,
+    SUM(TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE)) AS total_distance_km
+FROM
+    data
+WHERE
+    "Activity Type" IN ('Running', 'Trail Running', 'Indoor Running')
+    AND strftime("%Y", "Date") = '2025'
+GROUP BY
+    location
+2026-08-26 08:38:17 [ERROR] PDF export failed for history item 0 (question: 'show the sum of my runs in 2025, grouped by location'): No module named 'reportlab'
+2026-08-26 08:42:11 [WARNING] SQL error (attempt 1/3): Binder Error: Referenced column "%Y" not found in FROM clause!
+Candidate bindings: "Date"
+
+LINE 2: WHERE "Activity Type" = 'Running' AND strftime("%Y", "Date") = '2025'
+                                                       ^
+SQL:
+SELECT * FROM data
+WHERE "Activity Type" = 'Running' AND strftime("%Y", "Date") = '2025'
+ORDER BY TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE) DESC
+LIMIT 5
+2026-08-26 08:42:12 [WARNING] SQL error (attempt 2/3): Binder Error: Referenced column "%Y" not found in FROM clause!
+Candidate bindings: "Date"
+
+LINE 2: WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y") = '2025'
+                                                               ^
+SQL:
+SELECT * FROM data
+WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y") = '2025'
+ORDER BY TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE) DESC
+LIMIT 5
+2026-08-26 08:42:17 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:42:25 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:42:37 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:42:40 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:42:46 [ERROR] PDF export failed for history item 0 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:42:46 [ERROR] PDF export failed for history item 1 (question: 'show the five longest runs in 2025'): No module named 'reportlab'
+2026-08-26 08:44:50 [WARNING] SQL error (attempt 1/3): Binder Error: Referenced column "%Y" not found in FROM clause!
+Candidate bindings: "Date"
+
+LINE 2: WHERE "Activity Type" = 'Running' AND strftime("%Y", "Date") = '2025'
+                                                       ^
+SQL:
+SELECT * FROM data
+WHERE "Activity Type" = 'Running' AND strftime("%Y", "Date") = '2025'
+ORDER BY TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE) DESC
+LIMIT 10
+2026-08-26 08:44:51 [WARNING] SQL error (attempt 2/3): Binder Error: Referenced column "%Y" not found in FROM clause!
+Candidate bindings: "Date"
+
+LINE 2: WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y") = '2025'
+                                                               ^
+SQL:
+SELECT * FROM data
+WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y") = '2025'
+ORDER BY TRY_CAST(REPLACE("Distance", ',', '.') AS DOUBLE) DESC
+LIMIT 10
+2026-08-26 08:44:58 [ERROR] PDF export failed for history item 0 (question: 'list the 10 longest runs in 2025'): No module named 'reportlab'
+2026-08-26 09:00:05 [WARNING] SQL error (attempt 1/3): Binder Error: Referenced column "%Y-%m" not found in FROM clause!
+Candidate bindings: "Decompression"
+
+LINE 1: ... * FROM data WHERE "Activity Type" = 'Running' AND strftime("%Y-%m", "Date") = '2025-05'
+                                                                       ^
+SQL:
+SELECT * FROM data WHERE "Activity Type" = 'Running' AND strftime("%Y-%m", "Date") = '2025-05'
+2026-08-26 09:00:06 [WARNING] SQL error (attempt 2/3): Binder Error: Referenced column "%Y-%m" not found in FROM clause!
+Candidate bindings: "Decompression"
+
+LINE 1: ... data WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y-%m") = '2025-05'
+                                                                        ^
+SQL:
+SELECT * FROM data WHERE "Activity Type" = 'Running' AND strftime("Date", "%Y-%m") = '2025-05'

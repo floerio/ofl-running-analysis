@@ -92,6 +92,7 @@ Any OpenAI-compatible provider works — just change `OPENAI_BASE_URL` and `OPEN
 CSV_FILE = "data.csv"
 PARQUET_FILE = "data.parquet"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # fallback if env not set
+LLM_RESULT_ROW_LIMIT = 200                    # max rows passed to the LLM in prompts
 ```
 
 ---
@@ -129,7 +130,8 @@ streamlit run app.py
 ```
 Opens in the browser at `http://localhost:8501`. Supports:
 - Chat-style interface with full conversation history
-- SQL display, plain-English answer, data table, and chart per question
+- Structured answer (Facts / Summary / Analysis / Suggestions) per question
+- SQL display, data table, and chart per question
 - Schema viewer in the sidebar
 - Prompt history (persisted to `prompt_history.json`)
 - Pre-defined queries selector in the sidebar
@@ -142,7 +144,7 @@ Access via sidebar navigation → **Config** page. Provides:
 - **Model selector** — fetches available models live from the configured provider
 - **Data upload** — upload Garmin CSV to merge new activities (duplicates skipped)
 - **Data download** — export current dataset as CSV
-- **Prompt editor** — edit all AI prompts at runtime
+- **Prompt editor** — edit all AI prompts at runtime; each prompt expander shows a placeholder reference table with all available `{placeholder}` variables and their descriptions
 - **Query editor** — edit all pre-defined queries at runtime
 
 ### Pre-defined Queries
@@ -182,10 +184,13 @@ User Question
      │  (on error)               calls fix_sql() → LLM fixes broken SQL, retries up to 3×
      │
      ▼
-5. formulate_answer()          → LLM writes plain-English answer (temperature=0)
-     │
+5. format_result_for_prompt()  → truncates DataFrame to 200 rows for LLM injection;
+     │                            appends a note when result is larger
      ▼
-6. generate_chart_code()       → LLM decides if chart is useful, returns matplotlib code
+6. formulate_answer()          → LLM writes structured answer (temperature=0)
+     │                            sections: Facts / Summary / Analysis / Suggestions
+     ▼
+7. generate_chart_code()       → LLM decides if chart is useful, returns matplotlib code
      │                            (or None if not worth visualising)
      ▼
    render_chart()              → patches code, execs with df in scope, returns Figure
@@ -231,10 +236,10 @@ All LLM prompts have been externalized from the code into Markdown files for run
 | Prompt | Purpose | Key Placeholders |
 |--------|---------|------------------|
 | `sql_guidelines` | DuckDB SQL rules (shared block) | None |
-| `generate_sql` | SQL query generation | `{question}`, `{schema}`, `{sql_guidelines}`, `{history_section}` |
-| `fix_sql` | SQL error fixing | `{sql}`, `{error}`, `{schema}`, `{sql_guidelines}` |
-| `generate_chart_code` | Chart code generation | `{question}`, `{result_str}` |
-| `formulate_answer` | Answer formulation | `{question}`, `{result_str}`, `{history_section}` |
+| `generate_sql` | SQL query generation | `{question}`, `{schema}`, `{schema_description}`, `{sql_guidelines}`, `{history_section}` |
+| `fix_sql` | SQL error fixing | `{sql}`, `{error}`, `{schema}`, `{schema_description}`, `{sql_guidelines}` |
+| `generate_chart_code` | Chart code generation | `{question}`, `{result_str}`, `{schema_description}` |
+| `formulate_answer` | Answer formulation | `{question}`, `{result_str}`, `{schema_description}`, `{history_section}` |
 
 ### Usage
 1. Navigate to the **Config** page via sidebar
@@ -247,8 +252,6 @@ All LLM prompts have been externalized from the code into Markdown files for run
 
 ## Design Decisions
 
-## Design Decisions
-
 | Decision | Reason |
 |----------|--------|
 | **DuckDB** | Reads Parquet/CSV directly, no DB setup, fast on large files |
@@ -256,10 +259,19 @@ All LLM prompts have been externalized from the code into Markdown files for run
 | **Auto CSV→Parquet conversion** | Compares file mtimes — regenerates only when `data.csv` is newer |
 | **Schema passed to LLM** | Gives column names, types and sample rows → better SQL generation |
 | **`src/core.py` shared module** | All LLM/DuckDB/chart logic lives here; both CLI and web UI import it — no duplication |
+| **`src/query_manager.py`** | Dedicated module for pre-defined query load/save/revert/override with `QUERY_META` (title + description per query); same pattern as `prompt_manager.py` |
+| **`src/data_dictionary_manager.py`** | Manages `data_dictionary/default.md` as plain Markdown; load/save/revert/is_modified/original_text; no YAML parsing |
+| **`src/business_glossary_manager.py`** | Manages `business_glossary/default.md` — running-specific terms, Garmin metric names, and user phrasings; injected into `generate_sql` and `formulate_answer` as `{business_glossary}` |
+| **`src/ui_utils.py`** | Shared UI helpers used by both `app.py` and `pages/config.py`: prompt history persistence, password gate, PDF export (`build_pdf_export`) |
+| **PDF export** | Per-answer `📄 Export as PDF` download button; uses ReportLab to render question, answer (Markdown → flowables), chart image, and SQL into an A4 document |}
+| **Data dictionary as plain Markdown** | `data_dictionary/default.md` uses `## Column Name` headings with `**Label:**` and `**Description:**` fields; injected into all LLM prompts as `{data_dictionary}` via `prompt_manager.render()` |
 | **Two LLM calls (SQL + answer)** | Clean separation of concerns |
 | **`temperature=0` everywhere** | Fully deterministic output across all LLM calls |
 | **SQL retry loop (3 attempts)** | LLM receives broken SQL + error and fixes it automatically |
 | **Model selector** | Available models fetched live from the provider API; non-chat models (embeddings, rerankers, TTS, etc.) filtered out; selection persisted in session state and passed to all LLM calls |
+| **LLM result truncation** | `format_result_for_prompt()` caps DataFrame results at 200 rows before injecting into prompts; a note tells the LLM the result is partial so it doesn't overstate completeness |
+| **Structured answer format** | `formulate_answer.md` prompt instructs the LLM to produce four named sections (Facts / Summary / Analysis / Suggestions); renders natively as Markdown in the chat UI |
+| **Prompt placeholder reference table** | Config page shows a per-prompt table of all `{placeholder}` variables and their descriptions; `PROMPT_META` in `prompt_manager.py` is the single source of truth |
 | **Chart via `exec()`** | LLM generates matplotlib code, executed in-process with `df`, `plt`, `pd`, `np`, `FuncFormatter`, and `safe_pace_to_seconds` in scope |
 | **Chart code patching** | Generated code is patched before exec to fix known LLM mistakes (e.g. `set_formatter` → `set_major_formatter`, fragile pace parsers replaced with `safe_pace_to_seconds`) |
 | **Datetime → string conversion** | datetime64 columns converted to strings before charting so LLM `.str` accessor calls don't fail |
@@ -277,6 +289,17 @@ All LLM prompts have been externalized from the code into Markdown files for run
 - [x] ~~Add Streamlit web UI (charts embedded in browser)~~
 - [x] ~~Add conversation history (multi-turn questions)~~
 - [x] ~~Model selector for switching LLMs at runtime~~
+- [x] ~~LLM result truncation (cap at 200 rows before prompt injection)~~
+- [x] ~~Structured answer format (Facts / Summary / Analysis / Suggestions)~~
+- [x] ~~Prompt placeholder reference table in Config UI~~
+- [x] ~~`src/ui_utils.py` shared UI utilities module~~
+- [x] ~~PDF export per answer~~
+- [x] ~~Business Glossary (domain terms injected into prompts)~~
+- [x] ~~`src/query_manager.py` audit (full load/save/revert/meta pattern)~~
+- [x] ~~Data Dictionary migration to Markdown format~~
+- [x] ~~SQL Browser page~~
+- [x] ~~Log Viewer page~~
+- [ ] Follow-up suggestions (AI-generated clickable questions after first answer)
+- [ ] Chat Mode (intent classification for conversational follow-ups)
 - [ ] Save chart images to disk as an option
 - [ ] Support multiple CSV/data files
-- [ ] Handle very large DataFrames in answer formulation (token limit)

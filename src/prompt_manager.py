@@ -27,50 +27,97 @@ PROMPT_NAMES = [
     "fix_sql",
     "generate_chart_code",
     "formulate_answer",
+    "suggest_followups",
+    "chat_intent",
+    "chat_followup",
+    "chat_general",
 ]
 
 # Human-readable metadata shown in the config UI
 PROMPT_META = {
     "sql_guidelines": {
         "title": "SQL Guidelines",
-        "description": "DuckDB-specific SQL rules and best practices that are injected into SQL-related prompts.",
-        "placeholders": [],  # shared blocks have no placeholders
+        "description": "DuckDB-specific SQL rules and best practices. Injected as {sql_guidelines} into the SQL Generation and SQL Fixing prompts. No placeholders of its own.",
+        "placeholders": [],  # shared block — no placeholders
     },
     "generate_sql": {
         "title": "SQL Generation",
-        "description": "Prompt used to generate DuckDB SQL queries from user questions.",
+        "description": "Prompt sent to the LLM to generate a DuckDB SQL query from the user's question.",
         "placeholders": [
             ("{question}", "The user's question in plain English."),
-            ("{schema}", "Database schema with column names, types, and sample rows."),
-            ("{sql_guidelines}", "The SQL guidelines shared block (see above)."),
-            ("{history_section}", "Optional context from previous questions and their SQL."),
+            ("{schema}", "Live database schema: column names, types, and 5 sample rows."),
+            ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases (see Business Glossary in Config)."),
+            ("{sql_guidelines}", "Injected shared block: DuckDB SQL rules (see SQL Guidelines above)."),
+            ("{history_section}", "Previous questions and their SQL, for multi-turn context. Empty on first question."),
         ],
     },
     "fix_sql": {
         "title": "SQL Fixing",
-        "description": "Prompt used to fix SQL queries that failed with errors.",
+        "description": "Prompt sent to the LLM when a generated SQL query fails. The LLM receives the broken SQL and the error message and returns a corrected query.",
         "placeholders": [
-            ("{sql}", "The failed SQL query."),
-            ("{error}", "The error message from DuckDB."),
-            ("{schema}", "Database schema with column names, types, and sample rows."),
-            ("{sql_guidelines}", "The SQL guidelines shared block (see above)."),
+            ("{sql}", "The SQL query that failed."),
+            ("{error}", "The DuckDB error message."),
+            ("{schema}", "Live database schema: column names, types, and 5 sample rows."),
+            ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
+            ("{sql_guidelines}", "Injected shared block: DuckDB SQL rules (see SQL Guidelines above)."),
         ],
     },
     "generate_chart_code": {
         "title": "Chart Code Generation",
-        "description": "Prompt used to decide if a chart is useful and generate matplotlib code.",
+        "description": "Prompt sent to the LLM to decide whether a chart is useful and, if so, generate executable matplotlib Python code.",
         "placeholders": [
             ("{question}", "The user's question in plain English."),
-            ("{result_str}", "The query result as a string representation of the DataFrame."),
+            ("{result_str}", "The query result as a plain-text table (truncated to 200 rows)."),
+            ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
         ],
     },
     "formulate_answer": {
         "title": "Answer Formulation",
-        "description": "Prompt used to write a plain-English answer based on query results.",
+        "description": "Prompt sent to the LLM to write a structured answer from the query results. Produces four sections: Facts, Summary, Analysis, Suggestions.",
         "placeholders": [
             ("{question}", "The user's question in plain English."),
-            ("{result_str}", "The query result as a string representation of the DataFrame."),
-            ("{history_section}", "Optional context from previous questions."),
+            ("{result_str}", "The query result as a plain-text table (truncated to 200 rows)."),
+            ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases (see Business Glossary in Config)."),
+            ("{history_section}", "Previous questions and answers, for multi-turn context. Empty on first question."),
+        ],
+    },
+    "suggest_followups": {
+        "title": "Follow-up Suggestions",
+        "description": "Prompt sent to the LLM to generate 5 clickable follow-up question suggestions after each answer.",
+        "placeholders": [
+            ("{question}", "The user's question in plain English."),
+            ("{result_str}", "The query result as a plain-text table (truncated to 200 rows)."),
+        ],
+    },
+    "chat_intent": {
+        "title": "Chat Intent Classifier",
+        "description": "Classifies a question as NEW_QUERY, FOLLOWUP, or UNCLEAR. Used by Chat Mode to decide whether to run SQL or answer conversationally.",
+        "placeholders": [
+            ("{question}", "The current user question."),
+            ("{last_question}", "The previous question asked."),
+            ("{last_result_preview}", "A short preview of the previous query result."),
+            ("{history_section}", "Conversation history for context."),
+        ],
+    },
+    "chat_followup": {
+        "title": "Chat Follow-up Answer",
+        "description": "Conversational answer for follow-up questions that don't need a new SQL query. Used in Chat Mode.",
+        "placeholders": [
+            ("{question}", "The current follow-up question."),
+            ("{last_question}", "The previous question asked."),
+            ("{last_result}", "The full previous query result."),
+            ("{history_section}", "Conversation history for context."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases."),
+        ],
+    },
+    "chat_general": {
+        "title": "Chat General Answer",
+        "description": "Conversational answer for UNCLEAR questions that don't map to the database. Used in Chat Mode.",
+        "placeholders": [
+            ("{question}", "The current question."),
+            ("{history_section}", "Conversation history for context."),
         ],
     },
 }
@@ -138,8 +185,10 @@ def render(name: str, prompts: dict[str, str], **kwargs) -> str:
     """
     text = prompts[name]
 
-    # Inject shared blocks by name before other substitutions
+    # Inject shared blocks first (before other substitutions)
     text = text.replace("{sql_guidelines}", prompts.get("sql_guidelines", ""))
+    text = text.replace("{data_dictionary}", prompts.get("data_dictionary", ""))
+    text = text.replace("{business_glossary}", prompts.get("business_glossary", ""))
 
     # Substitute remaining placeholders; ignore unknown keys
     for key, value in kwargs.items():

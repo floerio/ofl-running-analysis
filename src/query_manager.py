@@ -31,24 +31,24 @@ QUERY_NAMES = [
 # Human-readable metadata shown in the config UI
 QUERY_META = {
     "query_1": {
-        "title": "Query 1",
-        "description": "Pre-defined query 1",
+        "title": "Query 1 — Runs in 2025",
+        "description": "Lists all running activities from 2025.",
     },
     "query_2": {
-        "title": "Query 2",
-        "description": "Pre-defined query 2",
+        "title": "Query 2 — Monthly distance comparison",
+        "description": "Compares total distance per month across all years.",
     },
     "query_3": {
         "title": "Query 3",
-        "description": "Pre-defined query 3",
+        "description": "Custom pre-defined query (edit to define).",
     },
     "query_4": {
         "title": "Query 4",
-        "description": "Pre-defined query 4",
+        "description": "Custom pre-defined query (edit to define).",
     },
     "query_5": {
         "title": "Query 5",
-        "description": "Pre-defined query 5",
+        "description": "Custom pre-defined query (edit to define).",
     },
 }
 

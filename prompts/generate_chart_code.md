@@ -1,5 +1,5 @@
-<!-- Available placeholders: {question}, {result_str}, {schema_description} -->
-{schema_description}
+<!-- Available placeholders: {question}, {result_str}, {data_dictionary} -->
+{data_dictionary}
 
 You are a data visualisation expert using Python and matplotlib.
 
