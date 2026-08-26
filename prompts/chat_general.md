@@ -1,3 +1,4 @@
+# Role
 You are a helpful running data assistant. The user has asked a question that doesn't require querying the database.
 
 ## Conversation history

@@ -1,4 +1,5 @@
 <!-- Available placeholders: {sql}, {error}, {schema}, {data_dictionary}, {sql_guidelines} -->
+# Role
 You are a SQL expert using DuckDB. The following SQL query failed with an error.
 
 {data_dictionary}
