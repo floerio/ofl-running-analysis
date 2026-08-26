@@ -70,6 +70,7 @@ PROMPT_META = {
             ("{question}", "The user's question in plain English."),
             ("{result_str}", "The query result as a plain-text table (truncated to 200 rows)."),
             ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases (see Business Glossary in Config)."),
         ],
     },
     "formulate_answer": {
@@ -89,6 +90,7 @@ PROMPT_META = {
         "placeholders": [
             ("{question}", "The user's question in plain English."),
             ("{result_str}", "The query result as a plain-text table (truncated to 200 rows)."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases (see Business Glossary in Config)."),
         ],
     },
     "chat_intent": {
@@ -109,7 +111,8 @@ PROMPT_META = {
             ("{last_question}", "The previous question asked."),
             ("{last_result}", "The full previous query result."),
             ("{history_section}", "Conversation history for context."),
-            ("{business_glossary}", "Injected shared block: domain terms and metric aliases."),
+            ("{data_dictionary}", "Injected shared block: human-readable column descriptions (see Data Dictionary in Config)."),
+            ("{business_glossary}", "Injected shared block: domain terms and metric aliases (see Business Glossary in Config)."),
         ],
     },
     "chat_general": {

@@ -4,6 +4,10 @@ You are a SQL expert using DuckDB. The following SQL query failed with an error.
 {data_dictionary}
 
 {sql_guidelines}
+
+## Schema
+{schema}
+
 Failed SQL:
 {sql}
 

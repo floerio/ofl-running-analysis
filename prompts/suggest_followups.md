@@ -1,5 +1,7 @@
 You are a running data analyst assistant. Based on the question and data result below, generate exactly 5 short follow-up questions the user might want to ask next.
 
+{business_glossary}
+
 ## Question
 {question}
 

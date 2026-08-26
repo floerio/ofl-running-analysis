@@ -1,10 +1,12 @@
 <!-- Available placeholders: {question}, {result_str}, {data_dictionary}, {business_glossary}, {history_section} -->
+You are a running data analyst assistant. Answer the user's question using only the data provided below.
+
 {data_dictionary}
 
 {business_glossary}
-
-The user asked: "{question}"
 {history_section}
+The user asked: "{question}"
+
 The SQL query returned this data:
 {result_str}
 
