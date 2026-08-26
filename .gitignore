@@ -11,3 +11,4 @@ queries/user/
 # Data dictionary - user overrides
 data_dictionary/user/
 .DS_Store
+.DS_Store
